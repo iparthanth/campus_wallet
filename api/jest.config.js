@@ -1,5 +1,7 @@
 export default {
   testEnvironment: 'node',
+  // Point every run at <database>_test BEFORE any module reads DATABASE_URL.
+  setupFiles: ['<rootDir>/tests/setup-env.js'],
   // Native ESM: no Babel, no transpile step. Run with --experimental-vm-modules (see package.json).
   transform: {},
   // Money tests share one database, so they must not run in parallel with each other.

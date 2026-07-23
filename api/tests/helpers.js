@@ -8,9 +8,26 @@ export const api = () => request(app);
 
 let migrated = false;
 
+/**
+ * Hard guard: refuse to truncate anything that is not obviously a test database.
+ * setup-env.js should already have redirected us, but a destructive operation deserves
+ * a second, independent check rather than trusting configuration to be correct.
+ */
+async function assertTestDatabase() {
+  const { rows } = await query('SELECT current_database() AS db');
+  const db = rows[0].db;
+  if (!db.endsWith('_test')) {
+    throw new Error(
+      `REFUSING TO TRUNCATE: connected to "${db}", which is not a _test database. ` +
+      `Tests must never run against development or production data.`
+    );
+  }
+}
+
 /** Fresh schema once, then a clean table state before every test. */
 export async function resetDb() {
   if (!migrated) {
+    await assertTestDatabase();
     await migrate({ silent: true });
     migrated = true;
   }
