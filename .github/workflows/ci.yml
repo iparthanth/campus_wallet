@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  api-tests:
+    runs-on: ubuntu-latest
+
+    # A real Postgres, not a mock. The concurrency tests are meaningless without one.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: wallet
+          POSTGRES_PASSWORD: wallet
+          POSTGRES_DB: campus_wallet
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U wallet -d campus_wallet"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://wallet:wallet@localhost:5432/campus_wallet
+      JWT_SECRET: ci-test-secret-not-used-in-production-min32
+      BCRYPT_ROUNDS: 4   # keep CI fast; production uses 12
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+
+      - run: npm ci
+        working-directory: api
+
+      - run: npm run migrate
+        working-directory: api
+
+      - run: npm run test:cov
+        working-directory: api
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: api/coverage/
