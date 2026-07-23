@@ -45,12 +45,18 @@ docker compose up          # database + API, migrations run automatically
 curl localhost:3000/health
 ```
 
-Without Docker (local Postgres):
+Without Docker (portable Postgres on Windows — no admin needed):
 
 ```bash
+# start the local cluster (once per boot)
+D:\devtools\pgsql\bin\pg_ctl.exe -D D:\devtools\pgdata_wallet -o "-p 5433" start
+
 cd api
-cp .env.example .env       # then set DATABASE_URL and JWT_SECRET
+cp .env.example .env       # DATABASE_URL=postgres://wallet:wallet@localhost:5433/campus_wallet
 npm ci && npm run migrate && npm run seed && npm start
+
+# stop it when done
+D:\devtools\pgsql\bin\pg_ctl.exe -D D:\devtools\pgdata_wallet stop
 ```
 
 Seeded logins — password `password123`:
