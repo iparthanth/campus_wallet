@@ -128,7 +128,10 @@ test('four rapid transfers trip the velocity rule and the transfer is flagged', 
     await expect(page.getByTestId('notice')).toBeVisible();
   }
 
-  await expect(page.getByTestId('notice')).toContainText('flagged');
+  // Assert the RULE NAME, not the sentence around it. "flagged" was UI copy and broke
+  // the moment the wording changed to "held for review"; VELOCITY is a domain constant
+  // that only changes if the rule itself does.
+  await expect(page.getByTestId('notice')).toContainText('VELOCITY');
   await page.getByTestId('tab-history').click();
   await expect(page.getByTestId('tx-flagged').first()).toBeVisible();
 });

@@ -3,13 +3,22 @@ import { api, clearToken, formatPaisa, getRole, getToken } from './api.js';
 import Auth from './Auth.jsx';
 import Send from './Send.jsx';
 import TopUp from './TopUp.jsx';
+import Analytics from './Analytics.jsx';
+import { Avatar, EmptyState, Message, SkeletonRows } from './components/ui.jsx';
+
+const NAV = [
+  { key: 'wallet',  label: 'Wallet',    icon: '◎' },
+  { key: 'send',    label: 'Send',      icon: '↗' },
+  { key: 'history', label: 'History',   icon: '≡' },
+  { key: 'topup',   label: 'Top up',    icon: '+', needs: 'topup' },
+  { key: 'admin',   label: 'Dashboard', icon: '◫', needs: 'admin' },
+];
 
 export default function App() {
   const [user, setUser] = useState(null);
   const [balance, setBalance] = useState(null);
   const [txs, setTxs] = useState([]);
-  const [flags, setFlags] = useState([]);
-  const [view, setView] = useState('wallet'); // wallet | send | history | flags
+  const [view, setView] = useState('wallet');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(Boolean(getToken()));
@@ -29,138 +38,161 @@ export default function App() {
     }
   }, []);
 
-  // A stored token means a returning user — restore the session instead of showing login.
   useEffect(() => {
-    if (getToken() && !user) {
-      setUser({ restored: true });
-      refresh();
-    } else {
-      setLoading(false);
-    }
+    if (getToken() && !user) { setUser({ restored: true }); refresh(); }
+    else setLoading(false);
   }, [user, refresh]);
 
   useEffect(() => { if (user) refresh(); }, [user, refresh]);
-
-  // Hide the top-up button entirely when the server has no bKash credentials.
   useEffect(() => { api.topupAvailable().then((r) => setTopupOk(r.available)).catch(() => setTopupOk(false)); }, []);
 
-  async function openFlags() {
-    setView('flags');
-    setError('');
-    try {
-      setFlags((await api.flags()).flags);
-    } catch (err) {
-      setError(err.status === 403 ? 'Admin access required.' : err.message);
-      setFlags([]);
-    }
-  }
-
   function signOut() {
-    clearToken();
-    setUser(null);
-    setBalance(null);
-    setTxs([]);
-    setView('wallet');
+    clearToken(); setUser(null); setBalance(null); setTxs([]); setView('wallet');
   }
 
   if (!user) return <Auth onSignedIn={(u) => { setUser(u); setView('wallet'); }} />;
-  if (loading) return <div className="shell"><p className="empty">Loading…</p></div>;
+
+  const isAdmin = getRole() === 'admin';
+  const visible = NAV.filter((n) => !n.needs || (n.needs === 'admin' ? isAdmin : topupOk));
+  const shown = view === 'history' ? txs : txs.slice(0, 6);
 
   return (
-    <div className="shell">
-      <header className="top">
-        <h1>Campus Wallet</h1>
-        <button className="link" onClick={signOut} data-testid="btn-signout">Sign out</button>
-      </header>
+    <div className="app">
+      <aside className="sidebar">
+        <div className="brand">
+          <span className="brand-mark" aria-hidden="true">CW</span>
+          <div>
+            <div className="brand-name">Campus Wallet</div>
+            <div className="brand-sub">Premier University</div>
+          </div>
+        </div>
 
-      <div className="card">
-        <p className="balance-label">Available balance</p>
-        <p className="balance" data-testid="balance">
-          {balance === null ? '—' : formatPaisa(balance)}
-        </p>
-      </div>
+        <nav className="nav" aria-label="Main">
+          {visible.map((n) => (
+            <button
+              key={n.key}
+              aria-current={view === n.key ? 'page' : undefined}
+              onClick={() => { setView(n.key); setNotice(''); }}
+              data-testid={`tab-${n.key === 'admin' ? 'flags' : n.key}`}
+            >
+              <span className="ico" aria-hidden="true">{n.icon}</span>{n.label}
+            </button>
+          ))}
+        </nav>
 
-      <div className="tabs">
-        <button className={view === 'wallet' ? 'on' : ''} onClick={() => setView('wallet')} data-testid="tab-wallet">Wallet</button>
-        <button className={view === 'send' ? 'on' : ''} onClick={() => { setView('send'); setNotice(''); }} data-testid="tab-send">Send</button>
-        <button className={view === 'history' ? 'on' : ''} onClick={() => setView('history')} data-testid="tab-history">History</button>
-        {topupOk && (
-          <button className={view === 'topup' ? 'on' : ''} onClick={() => { setView('topup'); setNotice(''); }} data-testid="tab-topup">Top up</button>
-        )}
-        {/* Only admins see this. The server still enforces it — see requireAdmin. */}
-        {getRole() === 'admin' && (
-          <button className={view === 'flags' ? 'on' : ''} onClick={openFlags} data-testid="tab-flags">Flags</button>
-        )}
-      </div>
+        <div className="sidebar-foot">
+          <div>
+            <div className="who-name">{isAdmin ? 'Administrator' : 'Signed in'}</div>
+          </div>
+          <button className="btn btn-ghost" onClick={signOut} data-testid="btn-signout">Sign out</button>
+        </div>
+      </aside>
 
-      {notice && <div className="msg ok" data-testid="notice">{notice}</div>}
-      {error && <div className="msg error" data-testid="app-error">{error}</div>}
-
-      {view === 'send' && (
-        <Send
-          balancePaisa={balance ?? 0}
-          onCancel={() => setView('wallet')}
-          onDone={(res) => {
-            const flagged = res.transaction.status === 'flagged';
-            setNotice(flagged
-              ? `Sent ${formatPaisa(res.transaction.amount_paisa)} — flagged for review (${res.flags.map((f) => f.rule_name).join(', ')})`
-              : `Sent ${formatPaisa(res.transaction.amount_paisa)}`);
-            setView('wallet');
-            refresh();
-          }}
-        />
-      )}
-
-      {view === 'topup' && (
-        <TopUp
-          onCancel={() => setView('wallet')}
-          onCredited={() => { setNotice('Wallet topped up via bKash.'); setView('wallet'); refresh(); }}
-        />
-      )}
-
-      {(view === 'wallet' || view === 'history') && (
-        <div className="card">
-          <p className="balance-label">{view === 'wallet' ? 'Recent activity' : 'All transactions'}</p>
-          {txs.length === 0 ? (
-            <p className="empty" data-testid="tx-empty">No transactions yet.</p>
+      <main className="main">
+        <div className="main-inner">
+          {view === 'admin' ? (
+            <>
+              <header className="page-head">
+                <h1 className="page-title">Dashboard</h1>
+                <p className="page-sub">Volume, senders, and everything the fraud rules held for review.</p>
+              </header>
+              <Analytics />
+            </>
           ) : (
-            <div data-testid="tx-list">
-              {(view === 'wallet' ? txs.slice(0, 5) : txs).map((t) => (
-                <div className="tx" key={t.id} data-testid="tx-row">
-                  <div>
-                    <div className="who">
-                      {t.direction === 'credit' ? 'From' : 'To'} {t.counterparty_email}
-                      {t.status === 'flagged' && <span className="chip" data-testid="tx-flagged">flagged</span>}
+            <>
+              <header className="page-head">
+                <h1 className="page-title">
+                  {view === 'send' ? 'Send money' : view === 'topup' ? 'Top up' : view === 'history' ? 'Transaction history' : 'Wallet'}
+                </h1>
+                <p className="page-sub">
+                  {view === 'send' ? 'Transfer balance to another student.'
+                    : view === 'topup' ? 'Add balance through bKash.'
+                    : view === 'history' ? 'Every transfer in and out of this wallet.'
+                    : 'Your balance and recent activity.'}
+                </p>
+              </header>
+
+              {view !== 'send' && view !== 'topup' && (
+                <div className="card">
+                  <div className="hero-row">
+                    <div>
+                      <div className="label-eyebrow">Available balance</div>
+                      {loading
+                        ? <div className="skel" style={{ width: 180, height: 44, marginTop: 8 }} />
+                        : <div className="hero-figure" data-testid="balance">{formatPaisa(balance ?? 0)}</div>}
                     </div>
-                    <div className="when">{new Date(t.created_at).toLocaleString()}</div>
-                  </div>
-                  <div className={`amt ${t.direction}`} data-testid="tx-amount">
-                    {t.direction === 'credit' ? '+' : '−'}{formatPaisa(t.amount_paisa)}
+                    <div className="btn-row" style={{ marginTop: 0 }}>
+                      <button className="btn" onClick={() => setView('send')}>Send money</button>
+                      {topupOk && <button className="btn btn-ghost" onClick={() => setView('topup')}>Top up</button>}
+                    </div>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+              )}
 
-      {view === 'flags' && (
-        <div className="card">
-          <p className="balance-label">Fraud flags (admin)</p>
-          {flags.length === 0 ? (
-            <p className="empty" data-testid="flags-empty">No flags to review.</p>
-          ) : (
-            <div data-testid="flag-list">
-              {flags.map((f) => (
-                <div className="flag" key={f.id} data-testid="flag-row">
-                  <span className="rule">{f.rule_name}</span> — {f.detail}
-                  <div className="when">{f.sender_email} → {f.recipient_email} · {formatPaisa(f.amount_paisa)}</div>
+              {notice && <Message kind="ok" testid="notice">{notice}</Message>}
+              {error && <Message kind="error" testid="app-error">{error}</Message>}
+
+              {view === 'send' && (
+                <Send
+                  balancePaisa={balance ?? 0}
+                  onCancel={() => setView('wallet')}
+                  onDone={(res) => {
+                    const flagged = res.transaction.status === 'flagged';
+                    setNotice(flagged
+                      ? `Sent ${formatPaisa(res.transaction.amount_paisa)} — held for review (${res.flags.map((f) => f.rule_name).join(', ')})`
+                      : `Sent ${formatPaisa(res.transaction.amount_paisa)}`);
+                    setView('wallet'); refresh();
+                  }}
+                />
+              )}
+
+              {view === 'topup' && (
+                <TopUp
+                  onCancel={() => setView('wallet')}
+                  onCredited={() => { setNotice('Wallet topped up through bKash.'); setView('wallet'); refresh(); }}
+                />
+              )}
+
+              {(view === 'wallet' || view === 'history') && (
+                <div className="card">
+                  <div className="card-head">
+                    <h2 className="card-title">{view === 'wallet' ? 'Recent activity' : 'All transactions'}</h2>
+                    {view === 'wallet' && txs.length > 6 && (
+                      <button className="btn-link" onClick={() => setView('history')}>View all</button>
+                    )}
+                  </div>
+
+                  {loading ? <SkeletonRows count={3} />
+                    : txs.length === 0 ? (
+                      <EmptyState mark="◎" title="No transactions yet"
+                        text="Money you send or receive will appear here." testid="tx-empty" />
+                    ) : (
+                      <div className="rows" data-testid="tx-list">
+                        {shown.map((t) => (
+                          <div className="row" key={t.id} data-testid="tx-row">
+                            <Avatar email={t.counterparty_email} />
+                            <div className="row-main">
+                              <div className="row-title">
+                                {t.counterparty_email}
+                                {t.status === 'flagged' && <> <span className="chip" data-testid="tx-flagged">flagged</span></>}
+                              </div>
+                              <div className="row-meta">
+                                {t.direction === 'credit' ? 'Received' : 'Sent'} · {new Date(t.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                              </div>
+                            </div>
+                            <div className={`row-amount ${t.direction === 'credit' ? 'amt-credit' : 'amt-debit'}`} data-testid="tx-amount">
+                              {t.direction === 'credit' ? '+' : '−'}{formatPaisa(t.amount_paisa)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           )}
         </div>
-      )}
+      </main>
     </div>
   );
 }

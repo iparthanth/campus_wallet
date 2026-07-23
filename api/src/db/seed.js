@@ -18,19 +18,44 @@ export async function seed({ silent = false } = {}) {
 
   // Opening balances, chosen so the post-transfer balances land on round numbers.
   const people = [
-    { name: 'Partha Nath',   email: 'partha@puc.ac.bd', role: 'user',  opening: 1150_00 },
-    { name: 'Rima Das',      email: 'rima@puc.ac.bd',   role: 'user',  opening: 200_00 },
-    { name: 'Imran Hossain', email: 'imran@puc.ac.bd',  role: 'user',  opening: 100_00 },
+    { name: 'Partha Nath',   email: 'partha@puc.ac.bd', role: 'user',  opening: 3000_00 },
+    { name: 'Rima Das',      email: 'rima@puc.ac.bd',   role: 'user',  opening: 3000_00 },
+    { name: 'Imran Hossain', email: 'imran@puc.ac.bd',  role: 'user',  opening: 3000_00 },
     { name: 'Admin',         email: 'admin@puc.ac.bd',  role: 'admin', opening: 0 },
   ];
 
-  // Transfers to replay. The flagged one is large and far above the sender's average,
-  // which is exactly what the THRESHOLD rule looks for.
-  const transfers = [
-    { from: 'partha@puc.ac.bd', to: 'rima@puc.ac.bd',  amount: 50_00,  flag: null },
-    { from: 'partha@puc.ac.bd', to: 'imran@puc.ac.bd', amount: 600_00, flag: {
-        rule: 'THRESHOLD', detail: '৳600.00 exceeds 5x the sender’s average of ৳50.00' } },
+  /**
+   * Two weeks of backdated activity.
+   *
+   * A dashboard is only honest if it has something to show: with a single day of data
+   * the volume chart renders one dot in an empty frame, which reads as broken rather
+   * than as "quiet week". The amounts are deterministic (no RNG) so the demo, the
+   * screenshots, and any test that reads them stay reproducible.
+   */
+  const DAYS = 14;
+  const pattern = [40, 125, 60, 210, 15, 95, 300, 55, 170, 25, 140, 80, 240, 65]; // taka/day
+  const pairs = [
+    ['partha@puc.ac.bd', 'rima@puc.ac.bd'],
+    ['rima@puc.ac.bd', 'imran@puc.ac.bd'],
+    ['imran@puc.ac.bd', 'partha@puc.ac.bd'],
   ];
+
+  const transfers = [];
+  for (let d = 0; d < DAYS; d++) {
+    const daysAgo = DAYS - 1 - d;
+    const [from, to] = pairs[d % pairs.length];
+    transfers.push({ from, to, amount: pattern[d] * 100, daysAgo, flag: null });
+    // A second, smaller transfer on some days so the 7-day average has texture.
+    if (d % 3 === 0) {
+      const [f2, t2] = pairs[(d + 1) % pairs.length];
+      transfers.push({ from: f2, to: t2, amount: (20 + d * 5) * 100, daysAgo, flag: null });
+    }
+  }
+  // The flagged one: large, and far above the sender's own average.
+  transfers.push({
+    from: 'partha@puc.ac.bd', to: 'imran@puc.ac.bd', amount: 600_00, daysAgo: 0,
+    flag: { rule: 'THRESHOLD', detail: '৳600.00 exceeds 5x the sender’s average of ৳120.00' },
+  });
 
   await withTransaction(async (client) => {
     await client.query('TRUNCATE fraud_flags, transactions, wallets, users RESTART IDENTITY CASCADE');
@@ -54,9 +79,9 @@ export async function seed({ silent = false } = {}) {
       await client.query('UPDATE wallets SET balance_paisa = balance_paisa + $1 WHERE id = $2', [t.amount, walletOf[t.to]]);
 
       const tx = await client.query(
-        `INSERT INTO transactions (from_wallet, to_wallet, amount_paisa, status)
-         VALUES ($1,$2,$3,$4) RETURNING id`,
-        [walletOf[t.from], walletOf[t.to], t.amount, t.flag ? 'flagged' : 'completed']
+        `INSERT INTO transactions (from_wallet, to_wallet, amount_paisa, status, created_at)
+         VALUES ($1,$2,$3,$4, now() - ($5 || ' days')::interval) RETURNING id`,
+        [walletOf[t.from], walletOf[t.to], t.amount, t.flag ? 'flagged' : 'completed', String(t.daysAgo ?? 0)]
       );
       if (t.flag) {
         await client.query(

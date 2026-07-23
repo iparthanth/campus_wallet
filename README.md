@@ -67,9 +67,18 @@ demo data obeys the same money-conservation invariant the application does.
 
 ## Screens
 
-| Sign in | Wallet | Confirm send | History |
-|---|---|---|---|
-| ![sign in](docs/screenshots/1-signin.png) | ![wallet](docs/screenshots/2-wallet.png) | ![confirm](docs/screenshots/3-send-confirm.png) | ![history](docs/screenshots/4-history.png) |
+| Wallet | Admin dashboard |
+|---|---|
+| ![wallet](docs/screenshots/2-wallet.png) | ![dashboard](docs/screenshots/4-dashboard.png) |
+
+| Sign in | Confirm send |
+|---|---|
+| ![sign in](docs/screenshots/1-signin.png) | ![confirm](docs/screenshots/3-send-confirm.png) |
+
+The dashboard charts are hand-built SVG — no charting library. The palette was run through
+a contrast/colour-blindness validator rather than eyeballed, and because the area fill sits
+below 3:1 against the surface, every chart ships the required relief: direct labels on the
+bars and a **Table** toggle that renders the same data as text.
 
 Sending is a deliberate two-step flow — enter, then confirm against the resulting balance —
 because a mis-typed amount is unrecoverable once money moves. Each send carries a generated

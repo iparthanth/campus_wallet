@@ -1,18 +1,20 @@
 import { useState } from 'react';
 import { api, formatPaisa, takaToPaisa } from './api.js';
+import { Field, Message } from './components/ui.jsx';
 
 /**
- * Two-step send: enter details, then confirm. The confirm step exists because a
- * mis-typed amount is unrecoverable once money moves.
+ * Two-step send. The confirm screen restates the amount, the recipient, and the
+ * balance that will remain — because a mis-typed amount is unrecoverable once the
+ * money has moved, and "are you sure?" with no numbers in it prevents nothing.
  */
 export default function Send({ balancePaisa, onDone, onCancel }) {
   const [toEmail, setToEmail] = useState('');
   const [amount, setAmount] = useState('');
-  const [stage, setStage] = useState('form'); // form | confirm
+  const [stage, setStage] = useState('form');
   const [paisa, setPaisa] = useState(0);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  // Generated once per send attempt so a double-submit cannot debit twice.
+  // One key per send attempt: a double-click or a retry cannot debit twice.
   const [idemKey] = useState(() => `web-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
 
   function review(e) {
@@ -20,7 +22,7 @@ export default function Send({ balancePaisa, onDone, onCancel }) {
     setError('');
     try {
       const p = takaToPaisa(amount);
-      if (p > balancePaisa) throw new Error(`You only have ${formatPaisa(balancePaisa)}`);
+      if (p > balancePaisa) throw new Error(`You only have ${formatPaisa(balancePaisa)} available`);
       setPaisa(p);
       setStage('confirm');
     } catch (err) {
@@ -32,8 +34,7 @@ export default function Send({ balancePaisa, onDone, onCancel }) {
     setBusy(true);
     setError('');
     try {
-      const res = await api.transfer(toEmail.trim().toLowerCase(), paisa, idemKey);
-      onDone(res);
+      onDone(await api.transfer(toEmail.trim().toLowerCase(), paisa, idemKey));
     } catch (err) {
       setError(err.message);
       setStage('form');
@@ -44,35 +45,46 @@ export default function Send({ balancePaisa, onDone, onCancel }) {
 
   if (stage === 'confirm') {
     return (
-      <div className="card" data-testid="send-confirm">
-        <p className="balance-label">Confirm transfer</p>
-        <p className="balance" data-testid="confirm-amount">{formatPaisa(paisa)}</p>
-        <p className="hint">to <strong data-testid="confirm-recipient">{toEmail}</strong></p>
-        <p className="hint">Balance after: {formatPaisa(balancePaisa - paisa)}</p>
-        <button onClick={confirm} disabled={busy} data-testid="btn-confirm">
-          {busy ? 'Sending…' : 'Confirm and send'}
-        </button>
-        <button className="ghost" onClick={() => setStage('form')} disabled={busy}>Back</button>
-        {error && <div className="msg error" data-testid="send-error">{error}</div>}
+      <div className="card" data-testid="send-confirm" style={{ maxWidth: 460 }}>
+        <div className="label-eyebrow">Confirm transfer</div>
+        <div className="hero-figure" data-testid="confirm-amount">{formatPaisa(paisa)}</div>
+
+        <div className="rows" style={{ marginTop: 'var(--s5)' }}>
+          <div className="row">
+            <span className="row-meta">To</span>
+            <span className="row-main" style={{ textAlign: 'right', fontWeight: 550 }} data-testid="confirm-recipient">{toEmail}</span>
+          </div>
+          <div className="row">
+            <span className="row-meta">Balance after</span>
+            <span className="row-main" style={{ textAlign: 'right', fontWeight: 550 }}>{formatPaisa(balancePaisa - paisa)}</span>
+          </div>
+        </div>
+
+        <div className="btn-row">
+          <button className="btn" onClick={confirm} disabled={busy} data-testid="btn-confirm">
+            {busy ? 'Sending…' : 'Confirm and send'}
+          </button>
+          <button className="btn btn-ghost" onClick={() => setStage('form')} disabled={busy}>Back</button>
+        </div>
+        {error && <Message kind="error" testid="send-error">{error}</Message>}
       </div>
     );
   }
 
   return (
-    <div className="card">
-      <form onSubmit={review}>
-        <label htmlFor="to">Send to (university email)</label>
-        <input id="to" data-testid="input-to" type="email" value={toEmail}
+    <div className="card" style={{ maxWidth: 460 }}>
+      <form onSubmit={review} noValidate>
+        <Field id="to" label="Send to" type="email" data-testid="input-to" value={toEmail}
                onChange={(e) => setToEmail(e.target.value)} placeholder="friend@puc.ac.bd" required />
-
-        <label htmlFor="amt">Amount (৳)</label>
-        <input id="amt" data-testid="input-amount" inputMode="decimal" value={amount}
-               onChange={(e) => setAmount(e.target.value)} placeholder="50.00" required />
-
-        <button type="submit" data-testid="btn-review">Review</button>
-        <button type="button" className="ghost" onClick={onCancel}>Cancel</button>
+        <Field id="amt" label="Amount" inputMode="decimal" prefix="৳" data-testid="input-amount"
+               value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00"
+               hint={`${formatPaisa(balancePaisa)} available`} required />
+        <div className="btn-row">
+          <button className="btn" type="submit" data-testid="btn-review">Review transfer</button>
+          <button className="btn btn-ghost" type="button" onClick={onCancel}>Cancel</button>
+        </div>
       </form>
-      {error && <div className="msg error" data-testid="send-error">{error}</div>}
+      {error && <Message kind="error" testid="send-error">{error}</Message>}
     </div>
   );
 }
