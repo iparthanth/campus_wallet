@@ -16,6 +16,19 @@ export const config = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '15m',
   bcryptRounds: Number(process.env.BCRYPT_ROUNDS ?? 12),
 
+  // bKash Tokenized Checkout (sandbox). Credentials are server-side only and are never
+  // sent to the browser. Absent config simply disables the top-up feature rather than
+  // crashing the app, so the wallet still runs without bKash.
+  bkash: {
+    enabled: Boolean(process.env.BKASH_APP_KEY && process.env.BKASH_APP_SECRET),
+    baseUrl: process.env.BKASH_BASE_URL ?? 'https://tokenized.sandbox.bka.sh/v1.2.0-beta',
+    appKey: process.env.BKASH_APP_KEY ?? '',
+    appSecret: process.env.BKASH_APP_SECRET ?? '',
+    username: process.env.BKASH_USERNAME ?? '',
+    password: process.env.BKASH_PASSWORD ?? '',
+    callbackUrl: process.env.BKASH_CALLBACK_URL ?? 'http://localhost:5173/topup/callback',
+  },
+
   // Fraud thresholds live in config, not scattered in code, so they are tunable per environment.
   fraud: {
     velocityWindowSeconds: Number(process.env.FRAUD_VELOCITY_WINDOW_SEC ?? 60),

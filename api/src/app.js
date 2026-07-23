@@ -2,6 +2,7 @@ import express from 'express';
 import { authRouter } from './routes/auth.js';
 import { walletRouter } from './routes/wallet.js';
 import { adminRouter } from './routes/admin.js';
+import { topupRouter } from './routes/topup.js';
 
 export function createApp() {
   const app = express();
@@ -13,6 +14,7 @@ export function createApp() {
 
   app.use('/auth', authRouter);
   app.use('/', walletRouter);
+  app.use('/', topupRouter);
   app.use('/admin', adminRouter);
 
   app.use((_req, res) => res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Route not found' } }));

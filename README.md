@@ -124,7 +124,7 @@ A deliberate pyramid — fast tests at the bottom, few slow ones on top.
 
 | **E2E** (`e2e/tests/wallet.spec.js`) | real Chrome → React → Express → Postgres | seconds |
 
-**58 tests, all green** — 54 API/unit against a real PostgreSQL 16, plus 4 Playwright E2E flows.
+**67 tests, all green** — 63 API/unit against a real PostgreSQL 16, plus 4 Playwright E2E flows.
 
 ```bash
 cd api && npm test        # 54 tests
@@ -175,13 +175,33 @@ top-5 senders per ISO week (`RANK() OVER`). History uses **keyset pagination** o
 `(created_at, id)`, not `OFFSET`, which degrades linearly and skips rows when data arrives
 mid-scroll.
 
+## bKash top-up (sandbox)
+
+Money enters the wallet through **bKash Tokenized Checkout**: Grant Token → Create Payment →
+user pays → Execute Payment. Credentials are server-side only; leave them blank and the
+feature disables itself (`/topup/available` returns false) rather than breaking the app.
+
+The part that matters is the failure path. In Bangladesh a payment routinely completes while
+the callback never arrives — backgrounded app, dropped connection, closed tab. Without
+recovery, that student has paid and received nothing. So:
+
+- `payment_id` is `UNIQUE` and the top-up row is locked `FOR UPDATE` before crediting, so a
+  duplicated callback, a retry, and the reconciler can all race and **only one credits**.
+- `POST /topup/reconcile` asks bKash what actually happened and credits if the payment really
+  completed — the button labelled *"Payment went through but nothing happened."*
+- An unknown `paymentID` returns **404**, not 500: a typo is not an outage, and collapsing
+  both hides real incidents in the logs.
+
+Tested against a **fake bKash server** (`tests/fake-bkash.js`) rather than the live sandbox —
+a third-party dependency makes a suite slow and flaky, and cannot be told to simulate a
+dropped callback on demand. The fake matches the documented request/response shapes.
+
 ## Limitations & next steps
 
 Honest about what this is not:
 
-- **No real money.** Balances are seeded/admin-credited. Real top-up via **bKash Tokenized
-  Checkout sandbox** (Grant Token → Create → Execute, plus a Query fallback to reconcile
-  missed callbacks) is the designed next step.
+- **No real money.** The bKash integration is sandbox-only; production needs merchant
+  onboarding. Balances are otherwise seeded or admin-credited.
 - **No refresh tokens** — a stolen token stays valid for its 15 minutes.
 - **No rate limiting** on `/auth/*` yet; brute-force protection is a gap.
 - **Fraud rules are deterministic**, not learned. A scoring model would need labelled fraud

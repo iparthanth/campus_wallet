@@ -45,6 +45,10 @@ export const api = {
     call('/transfers', { method: 'POST', body: { to_email, amount_paisa, idempotency_key } }),
   transactions: (cursor) => call(`/transactions?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`),
   flags: () => call('/admin/flags'),
+  topupAvailable: () => call('/topup/available', { auth: false }),
+  topupCreate: (amount_paisa) => call('/topup/create', { method: 'POST', body: { amount_paisa } }),
+  topupExecute: (paymentID) => call('/topup/execute', { method: 'POST', body: { paymentID } }),
+  topupReconcile: (paymentID) => call('/topup/reconcile', { method: 'POST', body: { paymentID } }),
 };
 
 /**

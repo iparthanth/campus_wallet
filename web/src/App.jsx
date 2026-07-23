@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, clearToken, formatPaisa, getRole, getToken } from './api.js';
 import Auth from './Auth.jsx';
 import Send from './Send.jsx';
+import TopUp from './TopUp.jsx';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -12,6 +13,7 @@ export default function App() {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(Boolean(getToken()));
+  const [topupOk, setTopupOk] = useState(false);
 
   const refresh = useCallback(async () => {
     setError('');
@@ -38,6 +40,9 @@ export default function App() {
   }, [user, refresh]);
 
   useEffect(() => { if (user) refresh(); }, [user, refresh]);
+
+  // Hide the top-up button entirely when the server has no bKash credentials.
+  useEffect(() => { api.topupAvailable().then((r) => setTopupOk(r.available)).catch(() => setTopupOk(false)); }, []);
 
   async function openFlags() {
     setView('flags');
@@ -79,6 +84,9 @@ export default function App() {
         <button className={view === 'wallet' ? 'on' : ''} onClick={() => setView('wallet')} data-testid="tab-wallet">Wallet</button>
         <button className={view === 'send' ? 'on' : ''} onClick={() => { setView('send'); setNotice(''); }} data-testid="tab-send">Send</button>
         <button className={view === 'history' ? 'on' : ''} onClick={() => setView('history')} data-testid="tab-history">History</button>
+        {topupOk && (
+          <button className={view === 'topup' ? 'on' : ''} onClick={() => { setView('topup'); setNotice(''); }} data-testid="tab-topup">Top up</button>
+        )}
         {/* Only admins see this. The server still enforces it — see requireAdmin. */}
         {getRole() === 'admin' && (
           <button className={view === 'flags' ? 'on' : ''} onClick={openFlags} data-testid="tab-flags">Flags</button>
@@ -100,6 +108,13 @@ export default function App() {
             setView('wallet');
             refresh();
           }}
+        />
+      )}
+
+      {view === 'topup' && (
+        <TopUp
+          onCancel={() => setView('wallet')}
+          onCredited={() => { setNotice('Wallet topped up via bKash.'); setView('wallet'); refresh(); }}
         />
       )}
 
