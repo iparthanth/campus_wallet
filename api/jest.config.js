@@ -5,7 +5,9 @@ export default {
   // Money tests share one database, so they must not run in parallel with each other.
   // (npm test already passes --runInBand.)
   testMatch: ['**/tests/**/*.test.js'],
-  collectCoverageFrom: ['src/**/*.js', '!src/server.js'],
+  // server.js and seed.js are CLI entry points, not request-path code — excluded so the
+  // coverage number reflects logic that can actually harbour a money bug.
+  collectCoverageFrom: ['src/**/*.js', '!src/server.js', '!src/db/seed.js'],
   coverageThreshold: {
     // The domain layer holds the money logic — it earns the strictest bar.
     './src/domain/': { statements: 85, branches: 75, functions: 90, lines: 85 },

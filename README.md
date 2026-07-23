@@ -15,16 +15,28 @@ same student taps **Send** twice at the same moment, on a flaky campus network, 
 devices. Naively, both requests read a ৳1000 balance, both approve a ৳600 transfer, and the
 wallet ends at **-৳200** — money created from nothing.
 
-This project makes that impossible, and proves it:
+This project makes that impossible, and — more importantly — **proves the proof works**.
 
 ```js
-// tests/transfer.concurrency.test.js
-const [a, b] = await Promise.all([sendSixHundred(), sendSixHundred()]);
-expect([a.status, b.status].sort()).toEqual([201, 422]); // exactly one wins
-expect(await balanceOf(sender.id)).toBe(START - AMOUNT); // money moved once
+// tests/lock.semantics.test.js
+// Another transaction is mid-flight spending ৳600 of ৳1000. We attempt ৳600 too.
+await blocker.query('UPDATE wallets SET balance_paisa = balance_paisa - 60000 WHERE id = $1', [walletId]);
+const inflight = api().post('/transfers').send({ amount_paisa: 600_00 }).then(r => r);
+await sleep(800);
+await blocker.query('COMMIT');
+
+expect((await inflight).status).toBe(422); // clean rejection on the true balance
 ```
 
-Delete the `FOR UPDATE` in `src/domain/transfer.js` and this test goes red.
+Delete the `FOR UPDATE` in `src/domain/transfer.js` and this test goes red with **500** —
+the stale read approves the transfer, and only the database `CHECK` constraint stops the
+balance going negative. Verified by actually deleting it.
+
+> **Why not the two-parallel-requests test?** I wrote that first, deleted `FOR UPDATE`, and
+> it still passed — the two requests rarely overlap inside the database, and the `UPDATE`
+> takes a row lock anyway, so "does it block?" cannot tell the two versions apart. A test
+> that only sometimes creates a race cannot prove anything. The deterministic version above
+> replaced it. The parallel tests remain as invariant checks, not as the proof.
 
 ## Run it
 
@@ -91,7 +103,10 @@ A deliberate pyramid — fast tests at the bottom, few slow ones on top.
 |---|---|---|
 | **Unit** (`fraud.unit.test.js`) | fraud rules, money helpers — pure functions, no DB | ms |
 | **API** (`auth`, `transfer.bva`) | real HTTP + real Postgres via supertest | seconds |
-| **Concurrency** (`transfer.concurrency`) | parallel requests against real row locks | seconds |
+| **Lock semantics** (`lock.semantics`) | **deterministic** — two controlled connections, interleaving forced | seconds |
+| **Concurrency** (`transfer.concurrency`) | parallel requests; invariant checks (money conserved, never negative) | seconds |
+
+**54 tests, all green** against a real PostgreSQL 16.
 
 ### Boundary Value Analysis
 

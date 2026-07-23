@@ -7,10 +7,18 @@ beforeEach(resetDb);
 afterAll(closeDb);
 
 /**
- * THE test. If SELECT ... FOR UPDATE is removed from transfer.js, this test fails —
- * both transfers read the same stale balance and the sender spends money twice.
+ * INVARIANT tests, not the correctness proof.
  *
- * This is the demo to run in an interview.
+ * Honest limitation: firing two requests with Promise.all does NOT reliably produce a
+ * race inside the database — the first transaction usually commits before the second
+ * even issues its SELECT. I verified this by deleting FOR UPDATE from transfer.js and
+ * watching these tests still pass.
+ *
+ * The deterministic proof lives in lock.semantics.test.js, which forces the interleaving
+ * with two controlled connections and fails (500 instead of 422) when the lock is removed.
+ *
+ * These remain valuable: they assert the invariants that must hold under ANY interleaving —
+ * money is conserved, balances never go negative, and an over-draw is refused.
  */
 describe('concurrent double-spend prevention', () => {
   test('two simultaneous transfers of 60% of balance: exactly one succeeds', async () => {
