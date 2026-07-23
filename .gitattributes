@@ -1,0 +1,4 @@
+# Keep line endings sane across Windows dev and Linux CI/containers.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
