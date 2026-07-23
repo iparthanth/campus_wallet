@@ -47,6 +47,16 @@ export const config = {
     appUrl: process.env.PUBLIC_APP_URL ?? 'http://localhost:5173',
   },
 
+  // SMS for phone verification. With no credentials the console provider runs instead,
+  // so verification works in development and CI without cost or sending a real message.
+  // BD gateways (sms.net.bd, MiMSMS, BulkSMSBD…) all accept this same POST shape.
+  sms: {
+    enabled: Boolean(process.env.SMS_API_KEY && process.env.SMS_API_URL),
+    apiUrl: process.env.SMS_API_URL ?? '',
+    apiKey: process.env.SMS_API_KEY ?? '',
+    senderId: process.env.SMS_SENDER_ID ?? 'CampusWallet',
+  },
+
   // Fraud thresholds live in config, not scattered in code, so they are tunable per environment.
   fraud: {
     velocityWindowSeconds: Number(process.env.FRAUD_VELOCITY_WINDOW_SEC ?? 60),
