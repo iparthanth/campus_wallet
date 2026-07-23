@@ -47,6 +47,25 @@ export const api = {
   flags: () => call('/admin/flags'),
 };
 
+/**
+ * Reads the role claim out of the JWT so the UI can hide admin-only controls.
+ *
+ * This is a DISPLAY convenience only. The token is not verified here and a user can
+ * trivially edit their own localStorage — authorisation is enforced server-side by
+ * requireAdmin, which is the only check that counts. Hiding the tab is courtesy;
+ * the 403 is the security.
+ */
+export function getRole() {
+  const token = getToken();
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.role ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** 10050 -> "৳100.50". Display only — never feed back into arithmetic. */
 export const formatPaisa = (paisa) => {
   const sign = paisa < 0 ? '-' : '';

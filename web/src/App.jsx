@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, clearToken, formatPaisa, getToken } from './api.js';
+import { api, clearToken, formatPaisa, getRole, getToken } from './api.js';
 import Auth from './Auth.jsx';
 import Send from './Send.jsx';
 
@@ -79,7 +79,10 @@ export default function App() {
         <button className={view === 'wallet' ? 'on' : ''} onClick={() => setView('wallet')} data-testid="tab-wallet">Wallet</button>
         <button className={view === 'send' ? 'on' : ''} onClick={() => { setView('send'); setNotice(''); }} data-testid="tab-send">Send</button>
         <button className={view === 'history' ? 'on' : ''} onClick={() => setView('history')} data-testid="tab-history">History</button>
-        <button className={view === 'flags' ? 'on' : ''} onClick={openFlags} data-testid="tab-flags">Flags</button>
+        {/* Only admins see this. The server still enforces it — see requireAdmin. */}
+        {getRole() === 'admin' && (
+          <button className={view === 'flags' ? 'on' : ''} onClick={openFlags} data-testid="tab-flags">Flags</button>
+        )}
       </div>
 
       {notice && <div className="msg ok" data-testid="notice">{notice}</div>}
