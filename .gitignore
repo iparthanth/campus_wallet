@@ -10,3 +10,6 @@ test-results/
 *.log
 .DS_Store
 pgdata/
+e2e/test-results/
+e2e/playwright-report/
+web/dist/
