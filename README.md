@@ -136,10 +136,10 @@ A deliberate pyramid — fast tests at the bottom, few slow ones on top.
 | **Top-up** (`topup.test.js`) | bKash flow against a controllable fake gateway | seconds |
 | **E2E** (`e2e/tests/wallet.spec.js`) | real Chrome → React → Express → Postgres | seconds |
 
-**67 tests, all green** — 63 API/unit against a real PostgreSQL 16, plus 4 Playwright E2E flows.
+**74 tests, all green** — 70 API/unit against a real PostgreSQL 16, plus 4 Playwright E2E flows.
 
 ```bash
-cd api && npm test              # 63 tests
+cd api && npm test              # 70 tests
 cd e2e && npx playwright test   # 4 E2E flows (needs api + web running)
 ```
 
@@ -171,6 +171,12 @@ cd api && npm run test:cov  # with coverage (domain/ gated at 85%)
 
 ## Security decisions
 
+- **Rate limiting** on `/auth/*`, keyed on **(IP, email)** rather than IP alone — a
+  university network or mobile CGNAT puts thousands of students behind one address, so
+  an IP-only limit would let ten fat-fingered passwords lock out the whole campus.
+- **`/health` vs `/ready`** — liveness never touches the database (restarting the API
+  cannot fix a broken database); readiness runs a real query and returns 503 honestly.
+  The original single `/health` reported "ok" during an actual Postgres outage.
 - **bcrypt** cost 12 (4 in CI for speed only).
 - **JWT** 15-minute expiry; expired, forged, and malformed tokens each tested.
 - **No user enumeration** — wrong password and unknown email return byte-identical responses,

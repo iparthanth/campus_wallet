@@ -16,6 +16,10 @@ export const config = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '15m',
   bcryptRounds: Number(process.env.BCRYPT_ROUNDS ?? 12),
 
+  // Browser origins allowed to call this API. Empty in development because the Vite
+  // dev server proxies /api, so requests are same-origin and never preflight.
+  corsOrigins: (process.env.CORS_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+
   // bKash Tokenized Checkout (sandbox). Credentials are server-side only and are never
   // sent to the browser. Absent config simply disables the top-up feature rather than
   // crashing the app, so the wallet still runs without bKash.

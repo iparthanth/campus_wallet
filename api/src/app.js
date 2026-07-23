@@ -3,26 +3,77 @@ import { authRouter } from './routes/auth.js';
 import { walletRouter } from './routes/wallet.js';
 import { adminRouter } from './routes/admin.js';
 import { topupRouter } from './routes/topup.js';
+import { config } from './config.js';
+import { query } from './db/pool.js';
+import { rateLimit, authKey } from './middleware/rateLimit.js';
 
 export function createApp() {
   const app = express();
 
-  app.use(express.json({ limit: '64kb' })); // a wallet request is tiny; cap it
+  // Behind Render/Vercel/nginx the client IP arrives in X-Forwarded-For. Without this,
+  // every request looks like it came from the proxy and rate limiting buckets everyone
+  // into one counter — locking out the whole campus after five bad logins.
+  app.set('trust proxy', 1);
+
+  app.use(express.json({ limit: '64kb' }));
   app.disable('x-powered-by');
 
+  // The browser app is served from a different origin in production.
+  app.use((req, res, next) => {
+    const origin = req.get('origin');
+    if (origin && config.corsOrigins.includes(origin)) {
+      res.set('Access-Control-Allow-Origin', origin);
+      res.set('Vary', 'Origin');
+      res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    }
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+    return next();
+  });
+
+  /**
+   * Liveness — the process is up.
+   * Deliberately does NOT touch the database: a load balancer uses this to decide
+   * whether to restart the process, and restarting the API will not fix a broken
+   * database.
+   */
   app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'campus-wallet-api' }));
 
-  app.use('/auth', authRouter);
-  app.use('/', walletRouter);
+  /**
+   * Readiness — the process can actually serve traffic.
+   *
+   * The earlier single /health returned "ok" while PostgreSQL was down, which is the
+   * worst kind of health check: it reports green during an outage. This one runs a
+   * real query and fails honestly.
+   */
+  app.get('/ready', async (_req, res) => {
+    const started = Date.now();
+    try {
+      await query('SELECT 1');
+      res.json({ status: 'ready', database: 'up', latency_ms: Date.now() - started });
+    } catch (err) {
+      res.status(503).json({
+        status: 'not_ready',
+        database: 'down',
+        error: { code: 'DB_UNAVAILABLE', message: err.message.slice(0, 120) },
+      });
+    }
+  });
+
+  // Credential endpoints are the brute-force surface, so they get the tight bucket.
+  app.use('/auth', rateLimit({ windowMs: 60_000, max: 10, key: 'auth', keyFn: authKey }), authRouter);
+  app.use('/', rateLimit({ windowMs: 60_000, max: 120, key: 'api' }), walletRouter);
   app.use('/', topupRouter);
   app.use('/admin', adminRouter);
 
   app.use((_req, res) => res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Route not found' } }));
 
-  // Central error handler: clients get a code, the server keeps the stack trace.
   // eslint-disable-next-line no-unused-vars
-  app.use((err, _req, res, _next) => {
-    console.error('[error]', err);
+  app.use((err, req, res, _next) => {
+    console.error(JSON.stringify({
+      level: 'error', msg: err.message, path: req.path, method: req.method,
+      stack: config.env === 'production' ? undefined : err.stack,
+    }));
     res.status(500).json({ error: { code: 'INTERNAL', message: 'Internal server error' } });
   });
 

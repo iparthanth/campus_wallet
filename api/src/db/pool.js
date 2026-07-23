@@ -9,6 +9,9 @@ pg.types.setTypeParser(pg.types.builtins.INT8, (v) => (v === null ? null : Numbe
 
 export const pool = new pg.Pool({
   connectionString: config.databaseUrl,
+  // Hosted Postgres (Neon, Supabase, Render) requires TLS but presents a certificate
+  // chain Node does not ship a root for. Local development uses no TLS at all.
+  ssl: /sslmode=require/.test(config.databaseUrl) ? { rejectUnauthorized: false } : false,
   max: 10,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 5_000,

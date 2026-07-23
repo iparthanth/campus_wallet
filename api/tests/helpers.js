@@ -2,6 +2,7 @@ import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { query, pool } from '../src/db/pool.js';
 import { migrate } from '../src/db/migrate.js';
+import { __resetRateLimits } from '../src/middleware/rateLimit.js';
 
 export const app = createApp();
 export const api = () => request(app);
@@ -32,6 +33,9 @@ export async function resetDb() {
     migrated = true;
   }
   await query('TRUNCATE fraud_flags, transactions, wallets, users RESTART IDENTITY CASCADE');
+  // Rate-limit counters are process state, not database state — reset them too, or a
+  // later test inherits an earlier one's exhausted budget.
+  __resetRateLimits();
 }
 
 export async function closeDb() {

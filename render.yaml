@@ -1,0 +1,25 @@
+# Render blueprint for the API.
+# Render reads this on "New > Blueprint" and provisions everything below.
+services:
+  - type: web
+    name: campus-wallet-api
+    runtime: node
+    plan: free
+    rootDir: api
+    buildCommand: npm ci
+    # Migrations run on every boot. They are forward-only and recorded in
+    # schema_migrations, so re-running is a no-op — which is what makes this safe
+    # rather than a deploy-time gamble.
+    startCommand: npm run migrate && npm start
+    healthCheckPath: /ready
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true        # Render generates a strong secret; never commit one
+      - key: DATABASE_URL
+        sync: false                # paste the Neon/Supabase connection string here
+      - key: CORS_ORIGINS
+        sync: false                # your Vercel URL, e.g. https://campus-wallet.vercel.app
+      - key: BCRYPT_ROUNDS
+        value: "12"
