@@ -33,6 +33,20 @@ export const config = {
     callbackUrl: process.env.BKASH_CALLBACK_URL ?? 'http://localhost:5173/topup/callback',
   },
 
+  // SSLCommerz. Defaults to the PUBLIC sandbox store, so the gateway works out of the
+  // box with no signup — the same credentials SSLCommerz publishes for testing.
+  // Production requires a real store_id and a card, which is a business step.
+  ssl: {
+    enabled: process.env.SSL_ENABLED !== 'false',
+    baseUrl: process.env.SSL_BASE_URL ?? 'https://sandbox.sslcommerz.com',
+    storeId: process.env.SSL_STORE_ID ?? 'testbox',
+    storePassword: process.env.SSL_STORE_PASSWORD ?? 'qwerty',
+    // Where SSLCommerz sends the student back. Must be reachable BY THE GATEWAY,
+    // so on a laptop this needs a tunnel; in production it is the API's public URL.
+    callbackBase: process.env.PUBLIC_API_URL ?? 'http://localhost:3000',
+    appUrl: process.env.PUBLIC_APP_URL ?? 'http://localhost:5173',
+  },
+
   // Fraud thresholds live in config, not scattered in code, so they are tunable per environment.
   fraud: {
     velocityWindowSeconds: Number(process.env.FRAUD_VELOCITY_WINDOW_SEC ?? 60),

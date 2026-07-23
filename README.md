@@ -1,8 +1,9 @@
 # Campus Wallet
 
-A fintech-style wallet for Premier University, Chattogram — students hold a balance and
-transfer to each other. Built to production standards: **money is correct under concurrency,
-and there is a test that proves it.**
+A campus wallet for Premier University, Chattogram. Students top up through **SSLCommerz**
+(bKash, Nagad, Rocket, upay, cards), pay the **canteen, photocopy corner and library desk**
+by QR, and send balance to each other. Built to production standards: **money is correct
+under concurrency, and there is a test that proves it.**
 
 [![CI](https://github.com/iparthanth/campus_wallet/actions/workflows/ci.yml/badge.svg)](https://github.com/iparthanth/campus_wallet/actions)
 
@@ -136,10 +137,10 @@ A deliberate pyramid — fast tests at the bottom, few slow ones on top.
 | **Top-up** (`topup.test.js`) | bKash flow against a controllable fake gateway | seconds |
 | **E2E** (`e2e/tests/wallet.spec.js`) | real Chrome → React → Express → Postgres | seconds |
 
-**74 tests, all green** — 70 API/unit against a real PostgreSQL 16, plus 4 Playwright E2E flows.
+**84 tests, all green** — 80 API/unit against a real PostgreSQL 16, plus 4 Playwright E2E flows.
 
 ```bash
-cd api && npm test              # 70 tests
+cd api && npm test              # 80 tests
 cd e2e && npx playwright test   # 4 E2E flows (needs api + web running)
 ```
 
@@ -193,7 +194,50 @@ top-5 senders per ISO week (`RANK() OVER`). History uses **keyset pagination** o
 `(created_at, id)`, not `OFFSET`, which degrades linearly and skips rows when data arrives
 mid-scroll.
 
-## bKash top-up (sandbox)
+## Paying on campus
+
+A wallet with nowhere to spend is a transfer app. These are the outlets money actually
+goes to, and how:
+
+1. Counter staff raise a charge — *"that's ৳85"* — which mints a **QR** (`campuswallet://pay/<token>`).
+2. The student scans, sees the outlet name and amount, and confirms.
+3. Money moves student wallet → outlet wallet in one locked transaction.
+
+The QR carries a random 72-bit token, **not the row id**: an incrementing id would let
+anyone pay — or probe — the next student's bill by guessing a number. Bills expire after
+10 minutes so one left open at a busy counter does not stay payable all afternoon.
+
+The hazard here is two phones scanning the same code. The charge row is locked and its
+status re-checked inside the transaction, so the second payer loses cleanly:
+
+```js
+// tests/campus.test.js
+const [r1, r2] = await Promise.all([payAs(alice), payAs(bob)]);
+expect([r1, r2].filter(r => r.status === 200).length).toBe(1);
+expect(await balanceOf(canteen.id)).toBe(100_00);   // paid once, not twice
+```
+
+Outlets hold real wallets, so canteen sales are covered by the same money-conservation
+invariant as peer transfers — nothing is created at the counter.
+
+## Topping up — SSLCommerz (real, working)
+
+**SSLCommerz** is Bangladesh's largest gateway and fronts bKash, Nagad, Rocket, upay, TAP
+and the major banks in one session. Its sandbox runs on published test credentials, so
+this integration works end to end **with no merchant agreement** — clone the repo and a
+real gateway session opens against SSLCommerz's own servers.
+
+The security boundary is `validatePayment()`. The browser comes back from the gateway with
+parameters a user can edit, so none of them are trusted: only the server-to-server
+validation response moves money, and the settled amount is compared against what the
+top-up expected. Without that check a student could open a ৳10 session and hand-craft a
+৳10,000 success URL.
+
+Two paths credit a wallet — the browser redirect and the server-to-server IPN — because on
+Bangladeshi mobile data the redirect frequently never arrives. Crediting is idempotent, so
+both racing is harmless.
+
+## bKash direct (sandbox, currently disabled)
 
 Money enters the wallet through **bKash Tokenized Checkout**: Grant Token → Create Payment →
 user pays → Execute Payment. Credentials are server-side only; leave them blank and the

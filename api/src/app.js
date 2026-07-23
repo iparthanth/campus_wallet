@@ -3,6 +3,7 @@ import { authRouter } from './routes/auth.js';
 import { walletRouter } from './routes/wallet.js';
 import { adminRouter } from './routes/admin.js';
 import { topupRouter } from './routes/topup.js';
+import { campusRouter } from './routes/campus.js';
 import { config } from './config.js';
 import { query } from './db/pool.js';
 import { rateLimit, authKey } from './middleware/rateLimit.js';
@@ -64,6 +65,7 @@ export function createApp() {
   app.use('/auth', rateLimit({ windowMs: 60_000, max: 10, key: 'auth', keyFn: authKey }), authRouter);
   app.use('/', rateLimit({ windowMs: 60_000, max: 120, key: 'api' }), walletRouter);
   app.use('/', topupRouter);
+  app.use('/', campusRouter);
   app.use('/admin', adminRouter);
 
   app.use((_req, res) => res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Route not found' } }));

@@ -22,6 +22,18 @@ export async function seed({ silent = false } = {}) {
     { name: 'Rima Das',      email: 'rima@puc.ac.bd',   role: 'user',  opening: 3000_00 },
     { name: 'Imran Hossain', email: 'imran@puc.ac.bd',  role: 'user',  opening: 3000_00 },
     { name: 'Admin',         email: 'admin@puc.ac.bd',  role: 'admin', opening: 0 },
+    // Counter staff. Each operates one campus outlet.
+    { name: 'Canteen Counter',  email: 'canteen@puc.ac.bd', role: 'user', opening: 0 },
+    { name: 'Photocopy Counter',email: 'copy@puc.ac.bd',    role: 'user', opening: 0 },
+    { name: 'Library Desk',     email: 'library@puc.ac.bd', role: 'user', opening: 0 },
+  ];
+
+  // The outlets a student actually spends at. Without these it is a P2P app, not a
+  // campus wallet: money has nowhere to go except another student.
+  const outlets = [
+    { operator: 'canteen@puc.ac.bd', name: 'Central Canteen',   category: 'canteen' },
+    { operator: 'copy@puc.ac.bd',    name: 'Photocopy Corner',  category: 'stationery' },
+    { operator: 'library@puc.ac.bd', name: 'Library Fine Desk', category: 'library' },
   ];
 
   /**
@@ -71,6 +83,15 @@ export async function seed({ silent = false } = {}) {
         [u.rows[0].id, p.opening]
       );
       walletOf[p.email] = w.rows[0].id;
+    }
+
+    for (const o of outlets) {
+      const op = (await client.query('SELECT id FROM users WHERE email = $1', [o.operator])).rows[0];
+      const w = (await client.query('SELECT id FROM wallets WHERE user_id = $1', [op.id])).rows[0];
+      await client.query(
+        'INSERT INTO merchants (name, category, wallet_id, operator_id) VALUES ($1,$2,$3,$4)',
+        [o.name, o.category, w.id, op.id]
+      );
     }
 
     for (const t of transfers) {
