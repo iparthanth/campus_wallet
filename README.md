@@ -4,9 +4,7 @@ A fintech-style wallet for Premier University, Chattogram — students hold a ba
 transfer to each other. Built to production standards: **money is correct under concurrency,
 and there is a test that proves it.**
 
-[![CI](https://github.com/USERNAME/campus-wallet/actions/workflows/ci.yml/badge.svg)](https://github.com/USERNAME/campus-wallet/actions)
-
-> Replace `USERNAME` in the badge URL after you push.
+[![CI](https://github.com/iparthanth/campus_wallet/actions/workflows/ci.yml/badge.svg)](https://github.com/iparthanth/campus_wallet/actions)
 
 ---
 
