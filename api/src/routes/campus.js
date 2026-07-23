@@ -4,6 +4,8 @@ import { requireAuth } from '../middleware/auth.js';
 import { query } from '../db/pool.js';
 import { createCharge, getCharge, payCharge, merchantSummary, ChargeError } from '../domain/charge.js';
 import { startVerification, verifyCode, OtpError } from '../domain/phoneVerification.js';
+import { settleCharge, unreconciled } from '../domain/settlement.js';
+import { config } from '../config.js';
 
 export const campusRouter = Router();
 
@@ -73,6 +75,39 @@ campusRouter.post('/charges/:token/pay', requireAuth, async (req, res, next) => 
   try {
     return res.json(await payCharge({ token: req.params.token, payerUserId: req.user.id }));
   } catch (err) { return handle(err, res, next); }
+});
+
+/** Tells the client which mode this deployment runs in, so the UI can match it. */
+campusRouter.get('/mode', (_req, res) => res.json({
+  wallet_mode: config.walletMode,
+  holds_balance: config.walletMode === 'closed_loop',
+}));
+
+const settleSchema = z.object({
+  method: z.string().min(3).max(20),
+  reference: z.string().min(4).max(60),
+});
+
+/** Zero-float: record a payment that happened on licensed rails, outside this system. */
+campusRouter.post('/charges/:token/settle', requireAuth, async (req, res, next) => {
+  const parsed = settleSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(422).json({ error: { code: 'VALIDATION', message: 'Method and transaction id are required' } });
+  }
+  try {
+    return res.json(await settleCharge({
+      token: req.params.token,
+      method: parsed.data.method,
+      externalRef: parsed.data.reference,
+      recordedByUserId: req.user.id,
+    }));
+  } catch (err) { return handle(err, res, next); }
+});
+
+/** What the outlet still has to match against its bank statement. */
+campusRouter.get('/merchant/unreconciled', requireAuth, async (_req, res, next) => {
+  try { return res.json({ settlements: await unreconciled({}) }); }
+  catch (err) { return next(err); }
 });
 
 /* ------------------------------------------------- phone verification (real OTP) */

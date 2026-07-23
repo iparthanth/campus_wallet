@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { withTransaction, query } from '../db/pool.js';
 import { isValidPaisa } from './money.js';
+import { config } from '../config.js';
 
 export class ChargeError extends Error {
   constructor(status, code, message) {
@@ -69,6 +70,12 @@ export async function getCharge(token) {
  * the second payer loses the race cleanly.
  */
 export async function payCharge({ token, payerUserId }) {
+  // In zero-float mode there is no balance to spend from — the student pays the outlet
+  // directly and the settlement is recorded instead.
+  if (config.walletMode === 'zero_float') {
+    throw new ChargeError(409, 'ZERO_FLOAT',
+      'This deployment does not hold balances — pay the outlet QR and record the reference');
+  }
   return withTransaction(async (client) => {
     const chargeRes = await client.query(
       `SELECT c.id, c.merchant_id, c.amount_paisa, c.status, c.expires_at, m.wallet_id AS merchant_wallet, m.name

@@ -10,6 +10,14 @@ function required(name, fallback) {
 
 export const config = {
   env: process.env.NODE_ENV ?? 'development',
+
+  // closed_loop = the app holds balances. Legal only as a demo: in Bangladesh, holding
+  //   student funds is e-money and needs a BB PSP licence (BDT 20 crore paid-up);
+  //   operating unlicensed under the PSS Act 2024 is a non-bailable offence.
+  // zero_float = the app never touches money. Students pay the outlet's own Bangla QR
+  //   from their own bKash/Nagad/bank app and this system records and reconciles.
+  //   This is the mode a real campus pilot must run in.
+  walletMode: process.env.WALLET_MODE === 'zero_float' ? 'zero_float' : 'closed_loop',
   port: Number(process.env.PORT ?? 3000),
   databaseUrl: required('DATABASE_URL'),
   jwtSecret: required('JWT_SECRET'),
