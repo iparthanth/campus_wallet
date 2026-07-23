@@ -60,8 +60,13 @@ npm ci && npm run migrate && npm run seed && npm start
 D:\devtools\pgsql\bin\pg_ctl.exe -D D:\devtools\pgdata_wallet stop
 ```
 
-Seeded logins — password `password123`:
-`partha@puc.ac.bd` (৳500) · `rima@puc.ac.bd` (৳250) · `imran@puc.ac.bd` (৳700) · `admin@puc.ac.bd` (admin)
+Seeded logins — password `password123` for all:
+
+| Account | Role |
+|---|---|
+| `partha@puc.ac.bd` · `rima@puc.ac.bd` · `imran@puc.ac.bd` | students, with two weeks of history |
+| `canteen@puc.ac.bd` · `copy@puc.ac.bd` · `library@puc.ac.bd` | outlet counters — raise QR charges |
+| `admin@puc.ac.bd` | analytics dashboard and fraud flags |
 
 The seed replays its transfers against the balances and asserts the ledger reconciles, so the
 demo data obeys the same money-conservation invariant the application does.
@@ -71,6 +76,10 @@ demo data obeys the same money-conservation invariant the application does.
 | Wallet | Admin dashboard |
 |---|---|
 | ![wallet](docs/screenshots/2-wallet.png) | ![dashboard](docs/screenshots/4-dashboard.png) |
+
+| Counter — bill + QR | Student confirming |
+|---|---|
+| ![counter](docs/screenshots/5-counter-qr.png) | ![pay](docs/screenshots/6-pay-confirm.png) |
 
 | Sign in | Confirm send |
 |---|---|
@@ -93,15 +102,15 @@ idempotency key, so a double-click or a flaky-network retry cannot debit twice.
        ▼
 ┌──────────────────────────────────────────┐
 │ Express API                              │
-│  routes/    auth · wallet · topup · admin │
+│  routes/  auth · wallet · topup · campus · admin │
 │  middleware requireAuth · requireAdmin   │
-│  domain/    transfer · topup · fraud · money │  ← pure, testable, no framework
+│  domain/  transfer · charge · topup · fraud · money │  ← pure, testable, no framework
 │  db/        pool · migrate · seed        │
 └───────────────┬──────────────────────────┘
                 │ node-postgres, explicit SQL (no ORM)
                 ▼
           PostgreSQL 16
-   wallets · transactions · fraud_flags · topups
+   wallets · transactions · charges · merchants · topups · fraud_flags
    CHECK balance_paisa >= 0   ← last line of defence
 ```
 

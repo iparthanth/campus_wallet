@@ -1,17 +1,19 @@
 import { useState } from 'react';
 import { api, formatPaisa, takaToPaisa } from './api.js';
+import { Field, Message } from './components/ui.jsx';
+
+const QUICK = [100, 200, 500, 1000];
 
 /**
- * bKash top-up.
+ * Top up through SSLCommerz — one session covers bKash, Nagad, Rocket, upay and cards,
+ * which is why it is preferred over integrating each wallet separately.
  *
- * The "I already paid" button is the important one. In Bangladesh a payment frequently
- * completes while the callback never arrives — the app is backgrounded, the network
- * drops, the tab is closed. Without a way to ask bKash what really happened, that
- * student's money is simply gone. This button calls the reconcile endpoint.
+ * The student leaves for the gateway and comes back to `/?topup=…`. Nothing here decides
+ * whether money arrived: the server validates with SSLCommerz directly, because every
+ * parameter on the return trip is editable by the person holding the browser.
  */
-export default function TopUp({ onCredited, onCancel }) {
+export default function TopUp({ onCancel }) {
   const [amount, setAmount] = useState('');
-  const [pending, setPending] = useState(null); // { paymentID, bkashURL }
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -20,67 +22,44 @@ export default function TopUp({ onCredited, onCancel }) {
     setError('');
     setBusy(true);
     try {
-      const paisa = takaToPaisa(amount);
-      const res = await api.topupCreate(paisa);
-      setPending(res);
-      // The real flow sends the user to bKash; the window is opened rather than
-      // redirected so the wallet keeps its state for the return.
-      if (res.bkashURL) window.open(res.bkashURL, '_blank', 'noopener');
+      const session = await api.sslCreate(takaToPaisa(amount));
+      // Full-page navigation, not a popup: mobile browsers block popups, and the
+      // gateway must own the tab for the bank's 3-D Secure step to work.
+      window.location.href = session.gatewayUrl;
     } catch (err) {
       setError(err.message);
-    } finally {
       setBusy(false);
     }
-  }
-
-  async function finish(mode) {
-    setBusy(true);
-    setError('');
-    try {
-      const res = mode === 'execute'
-        ? await api.topupExecute(pending.paymentID)
-        : await api.topupReconcile(pending.paymentID);
-
-      if (res.credited) onCredited(pending.amountPaisa ?? 0);
-      else setError('That payment has not completed yet on bKash’s side.');
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (pending) {
-    return (
-      <div className="card" data-testid="topup-pending">
-        <p className="balance-label">Waiting for bKash</p>
-        <p className="hint">Payment reference: <strong>{pending.paymentID}</strong></p>
-        <p className="hint">Complete the payment in the bKash window, then confirm below.</p>
-        <button onClick={() => finish('execute')} disabled={busy} data-testid="btn-topup-confirm">
-          {busy ? 'Checking…' : 'I have paid — credit my wallet'}
-        </button>
-        <button className="ghost" onClick={() => finish('reconcile')} disabled={busy} data-testid="btn-topup-recover">
-          Payment went through but nothing happened
-        </button>
-        <button className="ghost" onClick={onCancel} disabled={busy}>Cancel</button>
-        {error && <div className="msg error" data-testid="topup-error">{error}</div>}
-      </div>
-    );
   }
 
   return (
-    <div className="card">
+    <div className="card" style={{ maxWidth: 460 }}>
       <form onSubmit={start}>
-        <label htmlFor="topup-amt">Top up with bKash (৳)</label>
-        <input id="topup-amt" data-testid="input-topup" inputMode="decimal" value={amount}
-               onChange={(e) => setAmount(e.target.value)} placeholder="500.00" required />
-        <p className="hint">Sandbox only — no real money moves.</p>
-        <button type="submit" disabled={busy} data-testid="btn-topup-start">
-          {busy ? 'Contacting bKash…' : 'Continue to bKash'}
-        </button>
-        <button type="button" className="ghost" onClick={onCancel}>Cancel</button>
+        <Field id="topup-amt" label="Amount" prefix="৳" inputMode="decimal" data-testid="input-topup"
+               value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required />
+
+        <div className="btn-row" style={{ marginTop: 0, flexWrap: 'wrap' }}>
+          {QUICK.map((t) => (
+            <button key={t} type="button" className="btn btn-ghost" style={{ flex: '1 0 auto' }}
+                    onClick={() => setAmount(String(t))} data-testid={`quick-${t}`}>
+              ৳{t}
+            </button>
+          ))}
+        </div>
+
+        <p className="field-hint" style={{ marginTop: 'var(--s4)' }}>
+          You will be taken to SSLCommerz to pay with <strong>bKash, Nagad, Rocket, upay</strong> or a card.
+          This is the <strong>sandbox</strong> — no real money moves.
+        </p>
+
+        <div className="btn-row">
+          <button className="btn" disabled={busy} data-testid="btn-topup-start">
+            {busy ? 'Opening gateway…' : 'Continue to payment'}
+          </button>
+          <button className="btn btn-ghost" type="button" onClick={onCancel}>Cancel</button>
+        </div>
       </form>
-      {error && <div className="msg error" data-testid="topup-error">{error}</div>}
+      {error && <Message kind="error" testid="topup-error">{error}</Message>}
     </div>
   );
 }

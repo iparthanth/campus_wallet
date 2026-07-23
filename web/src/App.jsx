@@ -4,13 +4,17 @@ import Auth from './Auth.jsx';
 import Send from './Send.jsx';
 import TopUp from './TopUp.jsx';
 import Analytics from './Analytics.jsx';
+import PayCharge from './PayCharge.jsx';
+import Counter from './Counter.jsx';
 import { Avatar, EmptyState, Message, SkeletonRows } from './components/ui.jsx';
 
 const NAV = [
   { key: 'wallet',  label: 'Wallet',    icon: '◎' },
   { key: 'send',    label: 'Send',      icon: '↗' },
   { key: 'history', label: 'History',   icon: '≡' },
+  { key: 'pay',     label: 'Pay a bill', icon: '⌗' },
   { key: 'topup',   label: 'Top up',    icon: '+', needs: 'topup' },
+  { key: 'counter', label: 'Counter',   icon: '▤', needs: 'operator' },
   { key: 'admin',   label: 'Dashboard', icon: '◫', needs: 'admin' },
 ];
 
@@ -23,6 +27,7 @@ export default function App() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(Boolean(getToken()));
   const [topupOk, setTopupOk] = useState(false);
+  const [isOperator, setIsOperator] = useState(false);
 
   const refresh = useCallback(async () => {
     setError('');
@@ -46,6 +51,27 @@ export default function App() {
   useEffect(() => { if (user) refresh(); }, [user, refresh]);
   useEffect(() => { api.topupAvailable().then((r) => setTopupOk(r.available)).catch(() => setTopupOk(false)); }, []);
 
+  // Ask the server, not the token: operating an outlet is a database fact, and the
+  // endpoint answers 403 for everyone else.
+  useEffect(() => {
+    if (!user) return;
+    api.merchantSummary().then(() => setIsOperator(true)).catch(() => setIsOperator(false));
+  }, [user]);
+
+  // Coming back from the SSLCommerz gateway.
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const t = p.get('topup');
+    if (!t) return;
+    setNotice(t === 'success' ? 'Top-up received — your balance has been updated.' : '');
+    if (t && t !== 'success') setError(
+      t === 'cancelled' ? 'Top-up cancelled.' :
+      t === 'failed' ? 'The payment did not go through.' :
+      'We could not confirm that payment. If money left your account, contact the office with your transaction id.');
+    window.history.replaceState({}, '', window.location.pathname);
+    refresh();
+  }, [refresh]);
+
   function signOut() {
     clearToken(); setUser(null); setBalance(null); setTxs([]); setView('wallet');
   }
@@ -53,7 +79,8 @@ export default function App() {
   if (!user) return <Auth onSignedIn={(u) => { setUser(u); setView('wallet'); }} />;
 
   const isAdmin = getRole() === 'admin';
-  const visible = NAV.filter((n) => !n.needs || (n.needs === 'admin' ? isAdmin : topupOk));
+  const visible = NAV.filter((n) => !n.needs
+    || (n.needs === 'admin' ? isAdmin : n.needs === 'operator' ? isOperator : topupOk));
   const shown = view === 'history' ? txs : txs.slice(0, 6);
 
   return (
@@ -102,17 +129,21 @@ export default function App() {
             <>
               <header className="page-head">
                 <h1 className="page-title">
-                  {view === 'send' ? 'Send money' : view === 'topup' ? 'Top up' : view === 'history' ? 'Transaction history' : 'Wallet'}
+                  {view === 'send' ? 'Send money' : view === 'topup' ? 'Top up'
+                    : view === 'pay' ? 'Pay a bill' : view === 'counter' ? 'Counter'
+                    : view === 'history' ? 'Transaction history' : 'Wallet'}
                 </h1>
                 <p className="page-sub">
                   {view === 'send' ? 'Transfer balance to another student.'
-                    : view === 'topup' ? 'Add balance through bKash.'
+                    : view === 'topup' ? 'Add balance with bKash, Nagad, Rocket or a card.'
+                    : view === 'pay' ? 'Scan the counter QR at the canteen, photocopy corner or library.'
+                    : view === 'counter' ? 'Raise a bill for a student to scan.'
                     : view === 'history' ? 'Every transfer in and out of this wallet.'
                     : 'Your balance and recent activity.'}
                 </p>
               </header>
 
-              {view !== 'send' && view !== 'topup' && (
+              {view !== 'send' && view !== 'topup' && view !== 'pay' && view !== 'counter' && (
                 <div className="card">
                   <div className="hero-row">
                     <div>
@@ -123,6 +154,7 @@ export default function App() {
                     </div>
                     <div className="btn-row" style={{ marginTop: 0 }}>
                       <button className="btn" onClick={() => setView('send')}>Send money</button>
+                      <button className="btn btn-ghost" onClick={() => setView('pay')}>Pay a bill</button>
                       {topupOk && <button className="btn btn-ghost" onClick={() => setView('topup')}>Top up</button>}
                     </div>
                   </div>
@@ -146,11 +178,21 @@ export default function App() {
                 />
               )}
 
-              {view === 'topup' && (
-                <TopUp
+              {view === 'pay' && (
+                <PayCharge
+                  balancePaisa={balance ?? 0}
                   onCancel={() => setView('wallet')}
-                  onCredited={() => { setNotice('Wallet topped up through bKash.'); setView('wallet'); refresh(); }}
+                  onPaid={(res) => {
+                    setNotice(`Paid ${formatPaisa(res.amount_paisa)} to ${res.merchant_name}`);
+                    setView('wallet'); refresh();
+                  }}
                 />
+              )}
+
+              {view === 'counter' && <Counter />}
+
+              {view === 'topup' && (
+                <TopUp onCancel={() => setView('wallet')} />
               )}
 
               {(view === 'wallet' || view === 'history') && (

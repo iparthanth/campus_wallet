@@ -50,6 +50,14 @@ export const api = {
   topupCreate: (amount_paisa) => call('/topup/create', { method: 'POST', body: { amount_paisa } }),
   topupExecute: (paymentID) => call('/topup/execute', { method: 'POST', body: { paymentID } }),
   topupReconcile: (paymentID) => call('/topup/reconcile', { method: 'POST', body: { paymentID } }),
+  // SSLCommerz — one session covers bKash, Nagad, Rocket, upay and cards
+  sslCreate: (amount_paisa) => call('/topup/ssl/create', { method: 'POST', body: { amount_paisa } }),
+  // campus outlets
+  merchants: () => call('/merchants'),
+  merchantSummary: () => call('/merchant/summary'),
+  createCharge: (amount_paisa, memo) => call('/merchant/charges', { method: 'POST', body: { amount_paisa, memo } }),
+  charge: (token) => call(`/charges/${encodeURIComponent(token)}`),
+  payCharge: (token) => call(`/charges/${encodeURIComponent(token)}/pay`, { method: 'POST' }),
 };
 
 /**
