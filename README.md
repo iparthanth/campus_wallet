@@ -62,6 +62,16 @@ D:\devtools\pgsql\bin\pg_ctl.exe -D D:\devtools\pgdata_wallet stop
 Seeded logins — password `password123`:
 `partha@puc.ac.bd` (৳500) · `rima@puc.ac.bd` (৳250) · `imran@puc.ac.bd` (৳100) · `admin@puc.ac.bd` (admin)
 
+## Screens
+
+| Sign in | Wallet | Confirm send | History |
+|---|---|---|---|
+| ![sign in](docs/screenshots/1-signin.png) | ![wallet](docs/screenshots/2-wallet.png) | ![confirm](docs/screenshots/3-send-confirm.png) | ![history](docs/screenshots/4-history.png) |
+
+Sending is a deliberate two-step flow — enter, then confirm against the resulting balance —
+because a mis-typed amount is unrecoverable once money moves. Each send carries a generated
+idempotency key, so a double-click or a flaky-network retry cannot debit twice.
+
 ## Architecture
 
 ```
@@ -112,7 +122,19 @@ A deliberate pyramid — fast tests at the bottom, few slow ones on top.
 | **Lock semantics** (`lock.semantics`) | **deterministic** — two controlled connections, interleaving forced | seconds |
 | **Concurrency** (`transfer.concurrency`) | parallel requests; invariant checks (money conserved, never negative) | seconds |
 
-**54 tests, all green** against a real PostgreSQL 16.
+| **E2E** (`e2e/tests/wallet.spec.js`) | real Chrome → React → Express → Postgres | seconds |
+
+**58 tests, all green** — 54 API/unit against a real PostgreSQL 16, plus 4 Playwright E2E flows.
+
+```bash
+cd api && npm test        # 54 tests
+cd e2e && npx playwright test   # 4 E2E flows (needs api + web running)
+```
+
+E2E seeds balances by writing to the database directly rather than through a `/test/credit`
+endpoint. Shipping a money-creating route inside the production artifact, guarded only by an
+environment variable, is one misconfiguration away from letting anyone mint balance — so the
+test harness reaches around the app instead of putting a seam inside it.
 
 ### Boundary Value Analysis
 
