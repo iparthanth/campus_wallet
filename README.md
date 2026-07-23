@@ -60,7 +60,10 @@ D:\devtools\pgsql\bin\pg_ctl.exe -D D:\devtools\pgdata_wallet stop
 ```
 
 Seeded logins — password `password123`:
-`partha@puc.ac.bd` (৳500) · `rima@puc.ac.bd` (৳250) · `imran@puc.ac.bd` (৳100) · `admin@puc.ac.bd` (admin)
+`partha@puc.ac.bd` (৳500) · `rima@puc.ac.bd` (৳250) · `imran@puc.ac.bd` (৳700) · `admin@puc.ac.bd` (admin)
+
+The seed replays its transfers against the balances and asserts the ledger reconciles, so the
+demo data obeys the same money-conservation invariant the application does.
 
 ## Screens
 
@@ -80,15 +83,15 @@ idempotency key, so a double-click or a flaky-network retry cannot debit twice.
        ▼
 ┌──────────────────────────────────────────┐
 │ Express API                              │
-│  routes/    auth · wallet · admin        │
+│  routes/    auth · wallet · topup · admin │
 │  middleware requireAuth · requireAdmin   │
-│  domain/    transfer · fraud · money     │  ← pure, testable, no framework
+│  domain/    transfer · topup · fraud · money │  ← pure, testable, no framework
 │  db/        pool · migrate · seed        │
 └───────────────┬──────────────────────────┘
                 │ node-postgres, explicit SQL (no ORM)
                 ▼
           PostgreSQL 16
-   wallets · transactions · fraud_flags
+   wallets · transactions · fraud_flags · topups
    CHECK balance_paisa >= 0   ← last line of defence
 ```
 
@@ -121,13 +124,13 @@ A deliberate pyramid — fast tests at the bottom, few slow ones on top.
 | **API** (`auth`, `transfer.bva`) | real HTTP + real Postgres via supertest | seconds |
 | **Lock semantics** (`lock.semantics`) | **deterministic** — two controlled connections, interleaving forced | seconds |
 | **Concurrency** (`transfer.concurrency`) | parallel requests; invariant checks (money conserved, never negative) | seconds |
-
+| **Top-up** (`topup.test.js`) | bKash flow against a controllable fake gateway | seconds |
 | **E2E** (`e2e/tests/wallet.spec.js`) | real Chrome → React → Express → Postgres | seconds |
 
 **67 tests, all green** — 63 API/unit against a real PostgreSQL 16, plus 4 Playwright E2E flows.
 
 ```bash
-cd api && npm test        # 54 tests
+cd api && npm test              # 63 tests
 cd e2e && npx playwright test   # 4 E2E flows (needs api + web running)
 ```
 
