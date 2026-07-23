@@ -51,10 +51,12 @@ export const config = {
   // so verification works in development and CI without cost or sending a real message.
   // BD gateways (sms.net.bd, MiMSMS, BulkSMSBD…) all accept this same POST shape.
   sms: {
-    enabled: Boolean(process.env.SMS_API_KEY && process.env.SMS_API_URL),
-    apiUrl: process.env.SMS_API_URL ?? '',
+    enabled: Boolean(process.env.SMS_API_KEY),
+    provider: process.env.SMS_PROVIDER ?? 'alpha',   // alpha | bulksmsbd | console
     apiKey: process.env.SMS_API_KEY ?? '',
-    senderId: process.env.SMS_SENDER_ID ?? 'CampusWallet',
+    // Only set once a branded sender ID is approved (needs a trade licence). Without it
+    // a non-masking account still delivers — the sender shows as an operator long code.
+    senderId: process.env.SMS_SENDER_ID ?? '',
   },
 
   // Fraud thresholds live in config, not scattered in code, so they are tunable per environment.

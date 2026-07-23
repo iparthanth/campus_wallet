@@ -1,6 +1,6 @@
 import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 import { query, withTransaction } from '../db/pool.js';
-import { sendSms, normalizeBdPhone, smsProvider } from '../services/sms.js';
+import { sendSms, normalizeBdPhone, smsProvider, otpMessage } from '../services/sms.js';
 
 export class OtpError extends Error {
   constructor(status, code, message) {
@@ -74,7 +74,7 @@ export async function startVerification({ userId, phoneInput }) {
     );
   });
 
-  await sendSms(phone, `Campus Wallet: your verification code is ${code}. It expires in ${CODE_TTL_MINUTES} minutes.`);
+  await sendSms(phone, otpMessage(code, CODE_TTL_MINUTES));
 
   return {
     sent_to: `••••••${phone.slice(-4)}`,   // never echo the full number back
