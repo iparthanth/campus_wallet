@@ -94,6 +94,19 @@ jobs:
         working-directory: e2e
         run: npm ci && npx playwright install --with-deps chromium
 
+      # The API is backgrounded, so wait for it to actually serve before Playwright
+      # hits it — otherwise the first request races the server's boot and flakes.
+      # /ready runs a real DB query, so a 200 here means the whole stack is up.
+      - name: Wait for the API to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/ready > /dev/null; then
+              echo "API ready after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "API did not become ready in 30s"; exit 1
+
       - name: Run E2E
         working-directory: e2e
         run: npx playwright test
