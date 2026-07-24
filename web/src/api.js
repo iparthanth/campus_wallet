@@ -58,6 +58,10 @@ export const api = {
   createCharge: (amount_paisa, memo) => call('/merchant/charges', { method: 'POST', body: { amount_paisa, memo } }),
   charge: (token) => call(`/charges/${encodeURIComponent(token)}`),
   payCharge: (token) => call(`/charges/${encodeURIComponent(token)}/pay`, { method: 'POST' }),
+  // phone verification (the wallet's own OTP, not the payment provider's)
+  phoneStatus: () => call('/phone/status'),
+  phoneStart: (phone) => call('/phone/start', { method: 'POST', body: { phone } }),
+  phoneVerify: (code) => call('/phone/verify', { method: 'POST', body: { code } }),
 };
 
 /**

@@ -6,6 +6,7 @@ import TopUp from './TopUp.jsx';
 import Analytics from './Analytics.jsx';
 import PayCharge from './PayCharge.jsx';
 import Counter from './Counter.jsx';
+import PhoneVerify from './PhoneVerify.jsx';
 import { Avatar, EmptyState, Message, SkeletonRows } from './components/ui.jsx';
 
 const NAV = [
@@ -15,6 +16,7 @@ const NAV = [
   { key: 'pay',     label: 'Pay a bill', icon: '⌗' },
   { key: 'topup',   label: 'Top up',    icon: '+', needs: 'topup' },
   { key: 'counter', label: 'Counter',   icon: '▤', needs: 'operator' },
+  { key: 'account', label: 'Account',   icon: '☺' },
   { key: 'admin',   label: 'Dashboard', icon: '◫', needs: 'admin' },
 ];
 
@@ -131,6 +133,7 @@ export default function App() {
                 <h1 className="page-title">
                   {view === 'send' ? 'Send money' : view === 'topup' ? 'Top up'
                     : view === 'pay' ? 'Pay a bill' : view === 'counter' ? 'Counter'
+                    : view === 'account' ? 'Account'
                     : view === 'history' ? 'Transaction history' : 'Wallet'}
                 </h1>
                 <p className="page-sub">
@@ -138,12 +141,13 @@ export default function App() {
                     : view === 'topup' ? 'Add balance with bKash, Nagad, Rocket or a card.'
                     : view === 'pay' ? 'Scan the counter QR at the canteen, photocopy corner or library.'
                     : view === 'counter' ? 'Raise a bill for a student to scan.'
+                    : view === 'account' ? 'Verify the mobile number tied to this account.'
                     : view === 'history' ? 'Every transfer in and out of this wallet.'
                     : 'Your balance and recent activity.'}
                 </p>
               </header>
 
-              {view !== 'send' && view !== 'topup' && view !== 'pay' && view !== 'counter' && (
+              {view !== 'send' && view !== 'topup' && view !== 'pay' && view !== 'counter' && view !== 'account' && (
                 <div className="card">
                   <div className="hero-row">
                     <div>
@@ -190,6 +194,8 @@ export default function App() {
               )}
 
               {view === 'counter' && <Counter />}
+
+              {view === 'account' && <PhoneVerify />}
 
               {view === 'topup' && (
                 <TopUp onCancel={() => setView('wallet')} />
