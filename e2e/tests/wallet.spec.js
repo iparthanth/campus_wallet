@@ -73,7 +73,7 @@ test('sending money moves the balance and appears in both histories', async ({ p
   await page.getByTestId('btn-confirm').click();
 
   // Sender's balance drops and the transaction is listed.
-  await expect(page.getByTestId('notice')).toContainText('Sent ৳120.50');
+  await expect(page.getByTestId('toast-ok').last()).toContainText('Sent ৳120.50');
   await expect(page.getByTestId('balance')).toHaveText('৳379.50');
   await expect(page.getByTestId('tx-list')).toContainText(recipientEmail);
   await expect(page.getByTestId('tx-amount').first()).toContainText('−৳120.50');
@@ -125,13 +125,14 @@ test('four rapid transfers trip the velocity rule and the transfer is flagged', 
     await page.getByTestId('input-amount').fill('10');
     await page.getByTestId('btn-review').click();
     await page.getByTestId('btn-confirm').click();
-    await expect(page.getByTestId('notice')).toBeVisible();
+    await expect(page.getByTestId('toast-ok').last()).toBeVisible();
   }
 
   // Assert the RULE NAME, not the sentence around it. "flagged" was UI copy and broke
   // the moment the wording changed to "held for review"; VELOCITY is a domain constant
   // that only changes if the rule itself does.
-  await expect(page.getByTestId('notice')).toContainText('VELOCITY');
+  // Toasts stack: four sends in a row leave several on screen, so read the newest.
+  await expect(page.getByTestId('toast-ok').last()).toContainText('VELOCITY');
   await page.getByTestId('tab-history').click();
   await expect(page.getByTestId('tx-flagged').first()).toBeVisible();
 });

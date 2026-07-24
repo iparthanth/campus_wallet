@@ -7,6 +7,8 @@ import Analytics from './Analytics.jsx';
 import PayCharge from './PayCharge.jsx';
 import Counter from './Counter.jsx';
 import PhoneVerify from './PhoneVerify.jsx';
+import ThemeToggle from './components/ThemeToggle.jsx';
+import { useToast } from './components/Toasts.jsx';
 import { Avatar, EmptyState, Message, SkeletonRows } from './components/ui.jsx';
 
 const NAV = [
@@ -21,11 +23,11 @@ const NAV = [
 ];
 
 export default function App() {
+  const toast = useToast();
   const [user, setUser] = useState(null);
   const [balance, setBalance] = useState(null);
   const [txs, setTxs] = useState([]);
   const [view, setView] = useState('wallet');
-  const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(Boolean(getToken()));
   const [topupOk, setTopupOk] = useState(false);
@@ -65,14 +67,14 @@ export default function App() {
     const p = new URLSearchParams(window.location.search);
     const t = p.get('topup');
     if (!t) return;
-    setNotice(t === 'success' ? 'Top-up received — your balance has been updated.' : '');
+    if (t === 'success') toast('Top-up received — your balance has been updated.');
     if (t && t !== 'success') setError(
       t === 'cancelled' ? 'Top-up cancelled.' :
       t === 'failed' ? 'The payment did not go through.' :
       'We could not confirm that payment. If money left your account, contact the office with your transaction id.');
     window.history.replaceState({}, '', window.location.pathname);
     refresh();
-  }, [refresh]);
+  }, [refresh, toast]);
 
   function signOut() {
     clearToken(); setUser(null); setBalance(null); setTxs([]); setView('wallet');
@@ -87,6 +89,7 @@ export default function App() {
 
   return (
     <div className="app">
+      <a className="skip" href="#main">Skip to content</a>
       <aside className="sidebar">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">CW</span>
@@ -101,7 +104,7 @@ export default function App() {
             <button
               key={n.key}
               aria-current={view === n.key ? 'page' : undefined}
-              onClick={() => { setView(n.key); setNotice(''); }}
+              onClick={() => setView(n.key)}
               data-testid={`tab-${n.key === 'admin' ? 'flags' : n.key}`}
             >
               <span className="ico" aria-hidden="true">{n.icon}</span>{n.label}
@@ -110,6 +113,7 @@ export default function App() {
         </nav>
 
         <div className="sidebar-foot">
+          <ThemeToggle />
           <div>
             <div className="who-name">{isAdmin ? 'Administrator' : 'Signed in'}</div>
           </div>
@@ -117,8 +121,8 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="main">
-        <div className="main-inner">
+      <main className="main" id="main">
+        <div className="main-inner view" key={view}>
           {view === 'admin' ? (
             <>
               <header className="page-head">
@@ -165,7 +169,6 @@ export default function App() {
                 </div>
               )}
 
-              {notice && <Message kind="ok" testid="notice">{notice}</Message>}
               {error && <Message kind="error" testid="app-error">{error}</Message>}
 
               {view === 'send' && (
@@ -174,7 +177,7 @@ export default function App() {
                   onCancel={() => setView('wallet')}
                   onDone={(res) => {
                     const flagged = res.transaction.status === 'flagged';
-                    setNotice(flagged
+                    toast(flagged
                       ? `Sent ${formatPaisa(res.transaction.amount_paisa)} — held for review (${res.flags.map((f) => f.rule_name).join(', ')})`
                       : `Sent ${formatPaisa(res.transaction.amount_paisa)}`);
                     setView('wallet'); refresh();
@@ -187,7 +190,7 @@ export default function App() {
                   balancePaisa={balance ?? 0}
                   onCancel={() => setView('wallet')}
                   onPaid={(res) => {
-                    setNotice(`Paid ${formatPaisa(res.amount_paisa)} to ${res.merchant_name}`);
+                    toast(`Paid ${formatPaisa(res.amount_paisa)} to ${res.merchant_name}`);
                     setView('wallet'); refresh();
                   }}
                 />

@@ -73,7 +73,7 @@ export function VolumeChart({ data }) {
       <div className="card-head" style={{ marginBottom: 12 }}>
         <div className="legend">
           <span className="legend-item">
-            <span className="legend-swatch" style={{ background: 'var(--series-fill)' }} />Daily volume
+            <span className="legend-swatch" style={{ background: 'var(--series-ctx)' }} />Daily volume
           </span>
           <span className="legend-item">
             <span className="legend-swatch" style={{ background: 'var(--series-line)', height: 3, borderRadius: 2 }} />7-day average
@@ -104,7 +104,7 @@ export function VolumeChart({ data }) {
               </g>
             ))}
 
-            <path d={areaPath} fill="var(--series-fill)" opacity=".28" />
+            <path d={areaPath} fill="var(--series-ctx)" opacity=".45" />
             <path d={linePath} fill="none" stroke="var(--series-line)" strokeWidth="2"
                   strokeLinejoin="round" strokeLinecap="round" />
 
@@ -116,7 +116,7 @@ export function VolumeChart({ data }) {
               <g pointerEvents="none">
                 <line x1={x(hover)} x2={x(hover)} y1={PAD.t} y2={PAD.t + geom.ih} stroke="var(--axis)" strokeWidth="1" strokeDasharray="3 3" />
                 <circle cx={x(hover)} cy={y(rows[hover].total_paisa)} r="4.5"
-                        fill="var(--series-fill)" stroke="var(--surface)" strokeWidth="2" />
+                        fill="var(--series-line)" stroke="var(--surface)" strokeWidth="2" />
               </g>
             )}
 
@@ -200,7 +200,7 @@ export function TopSendersChart({ data }) {
               <div
                 style={{
                   width: `${pct}%`, height: '100%',
-                  background: hover === i ? 'var(--series-line)' : 'var(--series-fill)',
+                  background: hover === i ? 'var(--series-line)' : 'var(--accent)',
                   borderRadius: 4, transition: 'background .12s',
                 }}
               />

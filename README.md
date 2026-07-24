@@ -77,6 +77,14 @@ demo data obeys the same money-conservation invariant the application does.
 |---|---|
 | ![wallet](docs/screenshots/2-wallet.png) | ![dashboard](docs/screenshots/4-dashboard.png) |
 
+| Dark mode | Mobile |
+|---|---|
+| ![dark](docs/screenshots/9-dashboard-dark.png) | ![mobile](docs/screenshots/10-mobile.png) |
+
+Light and dark are both **selected** palettes, not an inverted flip — the dark chart
+colours were re-stepped and re-validated against the dark surface. On phones the sidebar
+becomes a fixed bottom tab bar in the thumb zone, with safe-area padding.
+
 | Counter — bill + QR | Student confirming |
 |---|---|
 | ![counter](docs/screenshots/5-counter-qr.png) | ![pay](docs/screenshots/6-pay-confirm.png) |
