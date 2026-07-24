@@ -1,5 +1,6 @@
 import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 import { query, withTransaction } from '../db/pool.js';
+import { config } from '../config.js';
 import { sendSms, normalizeBdPhone, smsProvider, otpMessage } from '../services/sms.js';
 
 export class OtpError extends Error {
@@ -76,10 +77,20 @@ export async function startVerification({ userId, phoneInput }) {
 
   await sendSms(phone, otpMessage(code, CODE_TTL_MINUTES));
 
+  // Dev convenience with a self-closing safety catch: the code is returned to the client
+  // ONLY when we are not in production AND no real SMS provider is configured — i.e. the
+  // one situation where the code cannot otherwise be delivered. Add an SMS key and the
+  // provider is no longer 'console', so this path shuts itself off; deploy with NODE_ENV
+  // =production and it is off regardless. This is why it is safe to expose, unlike a raw
+  // "return the OTP" that trusts a single env var.
+  const devCode =
+    config.env !== 'production' && smsProvider.name === 'console' ? code : undefined;
+
   return {
     sent_to: `••••••${phone.slice(-4)}`,   // never echo the full number back
     expires_in_seconds: CODE_TTL_MINUTES * 60,
-    provider: smsProvider.name,            // 'console' in dev — the code is in the server log
+    provider: smsProvider.name,
+    dev_code: devCode,
   };
 }
 

@@ -145,3 +145,25 @@ describe('phone verification', () => {
     expect(res.body.error.code).toBe('INVALID_PHONE');
   });
 });
+
+describe('the dev-code safety catch', () => {
+  test('the code is returned to the client ONLY through the console provider', async () => {
+    const user = await makeUser();
+    const res = await api().post('/phone/start').set(auth(user)).send({ phone: '01712349999' });
+    // Tests run with no SMS key, so the provider is 'console' and the code is exposed to
+    // make local testing possible.
+    expect(res.body.provider).toBe('console');
+    expect(res.body.dev_code).toMatch(/^\d{6}$/);
+    // And it is the real code: it verifies.
+    const done = await api().post('/phone/verify').set(auth(user)).send({ code: res.body.dev_code });
+    expect(done.status).toBe(200);
+    expect(done.body.verified).toBe(true);
+  });
+
+  test('the full phone number is never echoed back, only the last four', async () => {
+    const user = await makeUser();
+    const res = await api().post('/phone/start').set(auth(user)).send({ phone: '01712345688' });
+    expect(res.body.sent_to).toBe('••••••5688');
+    expect(JSON.stringify(res.body)).not.toContain('8801712345688');
+  });
+});

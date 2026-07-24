@@ -16,6 +16,7 @@ export default function PhoneVerify() {
   const [code, setCode] = useState('');
   const [sentTo, setSentTo] = useState('');
   const [provider, setProvider] = useState('');
+  const [devCode, setDevCode] = useState('');
   const [cooldown, setCooldown] = useState(0);
   const [error, setError] = useState('');
   const [ok, setOk] = useState('');
@@ -38,6 +39,7 @@ export default function PhoneVerify() {
       const res = await api.phoneStart(phone);
       setSentTo(res.sent_to);
       setProvider(res.provider);
+      setDevCode(res.dev_code ?? '');
       setStage('code');
       setCooldown(60);
     } catch (err) {
@@ -95,8 +97,11 @@ export default function PhoneVerify() {
 
         {provider === 'console' && (
           <Message kind="warn" testid="dev-hint">
-            Development mode — no SMS was sent. The code is printed in the API server log.
-            Add an SMS API key to deliver to a real SIM.
+            Development mode — no SMS was sent (no gateway configured).
+            {devCode && (
+              <> Your code is <strong data-testid="dev-code" style={{ fontFamily: 'monospace', fontSize: '15px' }}>{devCode}</strong>.{' '}
+              <button type="button" className="btn-link" onClick={() => setCode(devCode)} data-testid="btn-usecode">Use it</button>.</>
+            )}{' '}Add an SMS key to deliver to a real SIM instead.
           </Message>
         )}
 
