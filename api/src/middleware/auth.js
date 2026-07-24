@@ -15,7 +15,10 @@ export function requireAuth(req, res, next) {
   }
 
   try {
-    const payload = jwt.verify(token, config.jwtSecret);
+    // Pin the algorithm. Without this, jsonwebtoken accepts ANY algorithm the token
+    // claims — including "none" (unsigned) and RS/HS confusion where an attacker signs
+    // with the public key as an HMAC secret. We only ever issue HS256, so only accept it.
+    const payload = jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'] });
     req.user = { id: Number(payload.sub), role: payload.role };
     return next();
   } catch (err) {

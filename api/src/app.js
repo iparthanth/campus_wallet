@@ -19,6 +19,20 @@ export function createApp() {
   app.use(express.json({ limit: '64kb' }));
   app.disable('x-powered-by');
 
+  // Security headers, hand-rolled to avoid a dependency for six lines. This is a JSON
+  // API — it renders no HTML — so the CSP just forbids everything; nothing legitimate
+  // loads resources from an API response, and a strict one neutralises any reflected
+  // content. HSTS only bites once served over HTTPS, so it is harmless in local http.
+  app.use((_req, res, next) => {
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.set('X-Frame-Options', 'DENY');
+    res.set('Referrer-Policy', 'no-referrer');
+    res.set('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+    res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    res.set('Cross-Origin-Resource-Policy', 'same-site');
+    next();
+  });
+
   // The browser app is served from a different origin in production.
   app.use((req, res, next) => {
     const origin = req.get('origin');

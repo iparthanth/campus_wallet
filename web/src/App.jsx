@@ -80,7 +80,15 @@ export default function App() {
     clearToken(); setUser(null); setBalance(null); setTxs([]); setView('wallet');
   }
 
-  if (!user) return <Auth onSignedIn={(u) => { setUser(u); setView('wallet'); }} />;
+  if (!user) return (
+    <Auth onSignedIn={(u, opts) => {
+      setUser(u);
+      // Send a brand-new account straight to phone verification; returning users land
+      // on their wallet. Verification is encouraged, never a hard wall — the account
+      // already exists and works.
+      setView(opts?.justRegistered ? 'account' : 'wallet');
+    }} />
+  );
 
   const isAdmin = getRole() === 'admin';
   const visible = NAV.filter((n) => !n.needs

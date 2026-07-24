@@ -16,7 +16,10 @@ async function register(page, email, name = 'Test Student') {
   await page.getByTestId('input-name').fill(name);
   await page.getByTestId('input-email').fill(email);
   await page.getByTestId('input-password').fill(PASSWORD);
+  await page.getByTestId('input-confirm').fill(PASSWORD);  // registration now confirms the password
   await page.getByTestId('btn-submit').click();
+  // A new account lands on the Account (verify phone) screen, not the wallet — go to it.
+  await page.getByTestId('tab-wallet').click();
   await expect(page.getByTestId('balance')).toBeVisible();
 }
 

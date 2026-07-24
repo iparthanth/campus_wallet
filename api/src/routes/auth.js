@@ -10,7 +10,7 @@ export const authRouter = Router();
 const registerSchema = z.object({
   name: z.string().trim().min(1).max(120),
   email: z.string().trim().toLowerCase().email().max(200),
-  password: z.string().min(8).max(200),
+  password: z.string().min(8).max(72),  // bcrypt only hashes the first 72 bytes
 });
 
 const loginSchema = z.object({
@@ -30,7 +30,7 @@ function signToken(user) {
   return jwt.sign(
     { sub: String(user.id), role: user.role },
     config.jwtSecret,
-    { expiresIn: config.jwtExpiresIn }
+    { expiresIn: config.jwtExpiresIn, algorithm: 'HS256' }
   );
 }
 

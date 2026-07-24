@@ -8,6 +8,19 @@ function required(name, fallback) {
   return v;
 }
 
+/**
+ * A JWT secret shorter than 32 chars is brute-forceable, so refuse to start with a weak
+ * one rather than run insecurely. Failing loud at boot is the safe default — a misconfig
+ * that limps along with a guessable secret is the kind that ships to production unnoticed.
+ */
+function requireStrongSecret(name) {
+  const v = required(name);
+  if (v.length < 32) {
+    throw new Error(`${name} must be at least 32 characters (got ${v.length}). Generate one with: openssl rand -base64 48`);
+  }
+  return v;
+}
+
 export const config = {
   env: process.env.NODE_ENV ?? 'development',
 
@@ -20,7 +33,7 @@ export const config = {
   walletMode: process.env.WALLET_MODE === 'zero_float' ? 'zero_float' : 'closed_loop',
   port: Number(process.env.PORT ?? 3000),
   databaseUrl: required('DATABASE_URL'),
-  jwtSecret: required('JWT_SECRET'),
+  jwtSecret: requireStrongSecret('JWT_SECRET'),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '15m',
   bcryptRounds: Number(process.env.BCRYPT_ROUNDS ?? 12),
 
