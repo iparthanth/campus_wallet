@@ -26,21 +26,26 @@ if ($Stop) {
 # --- PostgreSQL ---
 $running = (& "$PGBIN\pg_ctl.exe" -D $PGDATA status 2>&1) -match "server is running"
 if (-not $running) {
-  & "$PGBIN\pg_ctl.exe" -D $PGDATA -o "-p 5433 -c listen_addresses=127.0.0.1" -l "$PGDATA\server.log" start | Out-Null
+  # No pipe here. The server pg_ctl spawns inherits stdout, so "| Out-Null" never sees
+  # end-of-stream and the script hangs forever with Postgres up but nothing else started.
+  # -l already sends the server's own output to the log; pg_ctl's few lines can print.
+  & "$PGBIN\pg_ctl.exe" -D $PGDATA -o "-p 5433 -c listen_addresses=127.0.0.1" -l "$PGDATA\server.log" -w start
   Start-Sleep -Seconds 3
 }
 Write-Output "postgres  : :5433"
 
 # --- API ---
 Stop-Port 3000
-Start-Process -FilePath "npm" -ArgumentList "start" -WorkingDirectory "$ROOT\api" -WindowStyle Hidden
+# npm.cmd, not npm: Start-Process resolves executables, not shell shims, so plain
+# "npm" silently fails to launch and the stack comes up with Postgres only.
+Start-Process -FilePath "npm.cmd" -ArgumentList "start" -WorkingDirectory "$ROOT\api" -WindowStyle Hidden
 Start-Sleep -Seconds 4
 try { $h = Invoke-RestMethod "http://localhost:3000/ready" -TimeoutSec 5; Write-Output "api       : :3000  ($($h.status), db $($h.database))" }
 catch { Write-Output "api       : :3000  (not ready yet - check api\ logs)" }
 
 # --- Web ---
 Stop-Port 5173
-Start-Process -FilePath "npm" -ArgumentList "run dev" -WorkingDirectory "$ROOT\web" -WindowStyle Hidden
+Start-Process -FilePath "npm.cmd" -ArgumentList "run dev" -WorkingDirectory "$ROOT\web" -WindowStyle Hidden
 Start-Sleep -Seconds 4
 Write-Output "web       : http://localhost:5173"
 Write-Output ""
