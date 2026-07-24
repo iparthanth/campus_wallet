@@ -1,9 +1,39 @@
 # Deploying Campus Wallet
 
-Three free services, about 20 minutes. Everything below needs **your** accounts — the
-sign-ups and the final deploy click are yours; the configuration is already committed.
+## The fast path — one repo connection (recommended)
 
-Architecture in production:
+`render.yaml` is a **complete Render Blueprint**: it provisions the PostgreSQL database,
+the API, and the static frontend together, and wires them to each other automatically.
+
+1. Sign up at [render.com](https://render.com) (free, no card) and connect your GitHub.
+2. **New → Blueprint** → pick `iparthanth/campus_wallet`. Render reads `render.yaml` and
+   shows the three services it will create. Click **Apply**.
+3. Wait ~5 minutes. Render creates the database, runs migrations + seed, and publishes the
+   frontend. The URLs appear on the dashboard.
+
+That's it — no connection strings to copy, no secrets to paste. The database URL, the JWT
+secret, and the frontend/API URLs are all wired by the blueprint (`fromDatabase`,
+`fromService`, `generateValue`).
+
+> **This is what makes it changeable later.** The services are connected to your GitHub
+> repo, so **every `git push` to `main` redeploys automatically** — the API, the frontend,
+> and any new migrations. You change the code, push, and the live site updates itself. No
+> manual redeploy, no re-uploading anything.
+
+After it's up: edit the `web` service's `/api/*` rewrite destination to your real API URL
+(Render names it `campus-wallet-api-XXXX.onrender.com`), or set it once in the dashboard.
+
+> Free tier notes: the API sleeps after ~15 min idle and takes ~30s to wake (open it once
+> before a demo); the free Postgres expires after 90 days (recreate it then). Both are the
+> tier, not the app.
+
+---
+
+## The manual path — separate providers (Vercel + Render + Neon)
+
+Use this if you want the frontend on Vercel specifically. Same result, more steps.
+
+Architecture:
 
 ```
 Vercel (React)  ──/api/*──>  Render (Express)  ──TLS──>  Neon (PostgreSQL)
@@ -11,7 +41,7 @@ Vercel (React)  ──/api/*──>  Render (Express)  ──TLS──>  Neon (P
 
 The browser only ever talks to your Vercel domain. Vercel rewrites `/api/*` to Render,
 so there is no cross-origin request from the user's point of view and no API key in the
-front end.
+front end. Each provider connects to the GitHub repo, so each also auto-deploys on push.
 
 ---
 

@@ -1,25 +1,76 @@
-# Render blueprint for the API.
-# Render reads this on "New > Blueprint" and provisions everything below.
+# Render Blueprint — the whole app from one repo connection.
+#
+# On Render: New → Blueprint → connect this GitHub repo. Render reads this file and
+# provisions the database, the API, and the static frontend together. Every push to the
+# connected branch then redeploys automatically — that is the "change it later" guarantee.
+databases:
+  - name: campus-wallet-db
+    plan: free            # free Postgres; expires after 90 days, recreate then
+    databaseName: campus_wallet
+    user: wallet
+
 services:
+  # ---- API (Express) ----
   - type: web
     name: campus-wallet-api
     runtime: node
     plan: free
     rootDir: api
     buildCommand: npm ci
-    # Migrations run on every boot. They are forward-only and recorded in
-    # schema_migrations, so re-running is a no-op — which is what makes this safe
-    # rather than a deploy-time gamble.
-    startCommand: npm run migrate && npm start
+    # Migrations are forward-only and recorded, so re-running on every boot is a no-op —
+    # safe rather than a deploy-time gamble. Seed runs too so the demo has data; it
+    # truncates first, so remove `&& npm run seed` once real users exist.
+    startCommand: npm run migrate && npm run seed && npm start
     healthCheckPath: /ready
     envVars:
       - key: NODE_ENV
         value: production
       - key: JWT_SECRET
-        generateValue: true        # Render generates a strong secret; never commit one
+        generateValue: true          # Render generates a strong secret; never commit one
       - key: DATABASE_URL
-        sync: false                # paste the Neon/Supabase connection string here
+        fromDatabase:                # wired straight from the database above — no copy-paste
+          name: campus-wallet-db
+          property: connectionString
       - key: CORS_ORIGINS
-        sync: false                # your Vercel URL, e.g. https://campus-wallet.vercel.app
+        fromService:                 # the frontend's own URL, filled in automatically
+          type: web
+          name: campus-wallet-web
+          property: url
+      - key: PUBLIC_APP_URL
+        fromService:
+          type: web
+          name: campus-wallet-web
+          property: url
+      - key: PUBLIC_API_URL
+        fromService:
+          type: web
+          name: campus-wallet-api
+          property: url
       - key: BCRYPT_ROUNDS
         value: "12"
+      - key: WALLET_MODE
+        value: closed_loop           # switch to zero_float for a lawful BD campus pilot
+
+  # ---- Frontend (static React) ----
+  - type: web
+    name: campus-wallet-web
+    runtime: static
+    rootDir: web
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    # SPA + API proxy. /api/* is rewritten to the API service so the browser only ever
+    # talks to one origin — no CORS from the user's point of view, no API URL baked in.
+    routes:
+      - type: rewrite
+        source: /api/*
+        destination: https://campus-wallet-api.onrender.com/*
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY

@@ -20,11 +20,19 @@ async function call(path, { method = 'GET', body, auth = true } = {}) {
     if (token) headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch(`/api${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let res;
+  try {
+    res = await fetch(`/api${path}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    // fetch only rejects on a network-level failure — DNS, offline, or the backend
+    // not deployed yet. Turn that into a clear message instead of a raw "Failed to
+    // fetch", so a frontend-only preview says why it cannot sign in.
+    throw new ApiError(0, 'NETWORK', 'Cannot reach the server. The backend may not be running.');
+  }
 
   const data = await res.json().catch(() => ({}));
 
@@ -32,6 +40,11 @@ async function call(path, { method = 'GET', body, auth = true } = {}) {
     const err = data.error ?? {};
     // An expired token should log the user out rather than leave them stuck on a dead screen.
     if (res.status === 401 && err.code === 'TOKEN_EXPIRED') clearToken();
+    // A non-JSON 404/5xx (no err.code) is the platform, not our API — e.g. the frontend
+    // is deployed but /api isn't wired to a backend yet. Say that plainly.
+    if (!err.code && (res.status === 404 || res.status >= 500)) {
+      throw new ApiError(res.status, 'NO_BACKEND', 'The server is not connected yet. Deploy the API and point /api at it.');
+    }
     throw new ApiError(res.status, err.code ?? 'UNKNOWN', err.message ?? 'Request failed');
   }
   return data;
