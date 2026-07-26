@@ -21,16 +21,70 @@ function requireStrongSecret(name) {
   return v;
 }
 
+/**
+ * Resolve WALLET_MODE, refusing the unlawful combination outright.
+ *
+ * Failing at boot is the point. An unlicensed stored-value wallet running in production
+ * is a criminal exposure for the university's officers, and the cost of that mistake is
+ * not symmetric with the cost of a failed deploy.
+ */
+export function readWalletMode(env = process.env) {
+  const requested = (env.WALLET_MODE ?? 'zero_float').trim();
+
+  if (requested !== 'zero_float' && requested !== 'closed_loop') {
+    throw new Error(
+      `WALLET_MODE must be "zero_float" or "closed_loop", got "${requested}". ` +
+      'Leave it unset for the lawful default (zero_float).'
+    );
+  }
+
+  if (requested === 'closed_loop' && (env.NODE_ENV ?? 'development') === 'production') {
+    throw new Error(
+      'REFUSING TO START: WALLET_MODE=closed_loop with NODE_ENV=production.\n' +
+      '\n' +
+      'Closed-loop mode holds student balances. Under the Payment and Settlement Systems\n' +
+      'Act 2024 s.15(1) that is issuing a prepaid payment instrument, which no institution\n' +
+      'may do without Bangladesh Bank approval. The offence is cognizable and non-bailable\n' +
+      '(s.39) and liability reaches officers personally (s.38).\n' +
+      '\n' +
+      'Run the pilot in zero_float mode: unset WALLET_MODE, or set WALLET_MODE=zero_float.\n' +
+      'Closed-loop remains available outside production for demonstration only.'
+    );
+  }
+
+  return requested;
+}
+
 export const config = {
   env: process.env.NODE_ENV ?? 'development',
 
-  // closed_loop = the app holds balances. Legal only as a demo: in Bangladesh, holding
-  //   student funds is e-money and needs a BB PSP licence (BDT 20 crore paid-up);
-  //   operating unlicensed under the PSS Act 2024 is a non-bailable offence.
-  // zero_float = the app never touches money. Students pay the outlet's own Bangla QR
-  //   from their own bKash/Nagad/bank app and this system records and reconciles.
-  //   This is the mode a real campus pilot must run in.
-  walletMode: process.env.WALLET_MODE === 'zero_float' ? 'zero_float' : 'closed_loop',
+  /**
+   * How this deployment handles money. DEFAULTS TO zero_float — the only lawful shape.
+   *
+   * zero_float  — the app never touches money. The student pays the outlet's own Bangla QR
+   *               from their own bKash/Nagad/bank app; this system records the order and
+   *               reconciles the acquirer's settlement against it.
+   *
+   * closed_loop — the app holds student balances. A DEMO MODE ONLY.
+   *
+   * Why closed_loop cannot ship: under the Payment and Settlement Systems Act 2024
+   * s.15(1), no "person, institution or company" may issue a prepaid payment instrument
+   * without Bangladesh Bank approval. The Bangla term used is প্রতিষ্ঠান (institution),
+   * which is deliberately broader than "company" and squarely covers a university. There
+   * is NO closed-loop carve-out in the enacted Act — the exemption often cited lives only
+   * in a DRAFT E-Money regulation that remains unenacted. The only published approval
+   * route (Closed PI Guidelines 2024) requires a Companies Act 1994 company with BDT 20
+   * crore paid-up capital and forbids reloadable balances.
+   *
+   * Penalties under s.37(1) are up to 5 years' imprisonment or BDT 50 lakh, and s.39 makes
+   * the offence cognizable and NON-BAILABLE. Under s.38 liability reaches directors and
+   * chief executives personally — for a university, the Vice-Chancellor and Registrar.
+   *
+   * So production refuses to boot in closed_loop. This is a deliberate hard stop: a
+   * misconfigured environment variable must not be able to expose PUC's officers to
+   * criminal liability, and a warning in a log nobody reads is not a control.
+   */
+  walletMode: readWalletMode(),
   port: Number(process.env.PORT ?? 3000),
   databaseUrl: required('DATABASE_URL'),
   jwtSecret: requireStrongSecret('JWT_SECRET'),

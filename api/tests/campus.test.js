@@ -1,11 +1,32 @@
 import { jest } from '@jest/globals';
-import { api, makeUser, balanceOf, resetDb, closeDb } from './helpers.js';
-import { query } from '../src/db/pool.js';
 
 jest.setTimeout(30_000);
 
-beforeEach(resetDb);
-afterAll(closeDb);
+/**
+ * The LEGACY closed-loop counter flow: the student pays from a balance this system holds.
+ *
+ * That mode is a demonstration only and production refuses to boot in it — holding
+ * student balances is issuing a prepaid payment instrument under the Payment and
+ * Settlement Systems Act 2024 s.15(1). The lawful counter flow is orders paid over
+ * Bangla QR; see order.test.js and orders.api.test.js.
+ *
+ * This file opts INTO closed_loop explicitly rather than relying on a default, so the
+ * legacy path stays covered while the production default is zero_float. The mode is read
+ * at import time, so modules load after the environment is set.
+ */
+let api, makeUser, balanceOf, resetDb, closeDb, query;
+
+beforeAll(async () => {
+  process.env.WALLET_MODE = 'closed_loop';
+  ({ api, makeUser, balanceOf, resetDb, closeDb } = await import('./helpers.js'));
+  ({ query } = await import('../src/db/pool.js'));
+});
+
+beforeEach(() => resetDb());
+afterAll(async () => {
+  await closeDb();
+  delete process.env.WALLET_MODE;
+});
 
 const auth = (u) => ({ Authorization: `Bearer ${u.token}` });
 
