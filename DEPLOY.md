@@ -95,8 +95,11 @@ secret, and the frontend/API URLs are all wired by the blueprint (`fromDatabase`
 > and any new migrations. You change the code, push, and the live site updates itself. No
 > manual redeploy, no re-uploading anything.
 
-After it's up: edit the `web` service's `/api/*` rewrite destination to your real API URL
-(Render names it `campus-wallet-api-XXXX.onrender.com`), or set it once in the dashboard.
+**Nothing to edit afterwards.** The frontend gets the API's real URL from `VITE_API_BASE`,
+which Render fills in from the API service at build time, and the API gets `CORS_ORIGINS`
+from the frontend's URL the same way. Neither hostname is written down anywhere, so neither
+can be wrong — which matters because Render appends a random suffix to free-tier service
+names (`campus-wallet-api-XXXX.onrender.com`).
 
 > Free tier notes: the API sleeps after ~15 min idle and takes ~30s to wake (open it once
 > before a demo); the free Postgres expires after 90 days (recreate it then). Both are the
