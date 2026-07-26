@@ -6,6 +6,7 @@ import TopUp from './TopUp.jsx';
 import Analytics from './Analytics.jsx';
 import PayCharge from './PayCharge.jsx';
 import Counter from './Counter.jsx';
+import Reconciliation from './Reconciliation.jsx';
 import PhoneVerify from './PhoneVerify.jsx';
 import ThemeToggle from './components/ThemeToggle.jsx';
 import { useToast } from './components/Toasts.jsx';
@@ -20,6 +21,7 @@ const NAV = [
   { key: 'counter', label: 'Counter',   icon: '▤', needs: 'operator' },
   { key: 'account', label: 'Account',   icon: '☺' },
   { key: 'admin',   label: 'Dashboard', icon: '◫', needs: 'admin' },
+  { key: 'recon',   label: 'Reconcile', icon: '⇄', needs: 'admin' },
 ];
 
 export default function App() {
@@ -59,7 +61,9 @@ export default function App() {
   // endpoint answers 403 for everyone else.
   useEffect(() => {
     if (!user) return;
-    api.merchantSummary().then(() => setIsOperator(true)).catch(() => setIsOperator(false));
+    // outletSummary, not the legacy merchantSummary: both resolve by operator_id, but this
+    // one is the zero-float route the Counter screen itself uses.
+    api.outletSummary().then(() => setIsOperator(true)).catch(() => setIsOperator(false));
   }, [user]);
 
   // Coming back from the SSLCommerz gateway.
@@ -131,7 +135,15 @@ export default function App() {
 
       <main className="main" id="main">
         <div className="main-inner view" key={view}>
-          {view === 'admin' ? (
+          {view === 'recon' ? (
+            <>
+              <header className="page-head">
+                <h1 className="page-title">Reconciliation</h1>
+                <p className="page-sub">Match the bank&rsquo;s settlement against what the campus sold.</p>
+              </header>
+              <Reconciliation />
+            </>
+          ) : view === 'admin' ? (
             <>
               <header className="page-head">
                 <h1 className="page-title">Dashboard</h1>

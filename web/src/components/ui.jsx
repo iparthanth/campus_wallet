@@ -54,7 +54,8 @@ export function Field({ id, label, hint, prefix, ...input }) {
 }
 
 export function Message({ kind = 'error', children, testid }) {
-  const icon = kind === 'error' ? '!' : kind === 'warn' ? '!' : '✓';
+  // 'info' must not read as success — a neutral explanation gets a neutral mark.
+  const icon = kind === 'error' || kind === 'warn' ? '!' : kind === 'info' ? 'i' : '✓';
   return (
     <div className={`msg msg-${kind}`} role={kind === 'error' ? 'alert' : 'status'} data-testid={testid}>
       {/* Icon + text, never colour alone — a status must survive being read in greyscale */}

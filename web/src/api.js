@@ -65,6 +65,9 @@ export const api = {
   topupReconcile: (paymentID) => call('/topup/reconcile', { method: 'POST', body: { paymentID } }),
   // SSLCommerz — one session covers bKash, Nagad, Rocket, upay and cards
   sslCreate: (amount_paisa) => call('/topup/ssl/create', { method: 'POST', body: { amount_paisa } }),
+  // Which mode this deployment runs in. Production is always zero_float — the API refuses
+  // to boot otherwise — so the UI asks rather than assuming.
+  mode: () => call('/mode', { auth: false }),
   // campus outlets
   merchants: () => call('/merchants'),
   merchantSummary: () => call('/merchant/summary'),
@@ -75,6 +78,24 @@ export const api = {
   phoneStatus: () => call('/phone/status'),
   phoneStart: (phone) => call('/phone/start', { method: 'POST', body: { phone } }),
   phoneVerify: (code) => call('/phone/verify', { method: 'POST', body: { code } }),
+
+  // ---------------------------------------------------------------- zero-float orders
+  // The student pays the outlet's Bangla QR from their own bank or MFS app; this system
+  // records the order and later matches the acquirer's settlement to it.
+  raiseOrder: (amount_paisa, memo) => call('/orders', { method: 'POST', body: { amount_paisa, memo } }),
+  order: (token) => call(`/orders/${encodeURIComponent(token)}`),
+  outletSummary: () => call('/outlet/summary'),
+
+  // ---------------------------------------------------------------- reconciliation (admin)
+  importSettlement: (payload) => call('/admin/settlements/import', { method: 'POST', body: payload }),
+  reconciliationExceptions: () => call('/admin/reconciliation/exceptions'),
+  // 409 here is not an error to swallow — it means the two tables disagree.
+  crossCheck: () => call('/admin/reconciliation/cross-check'),
+  auditRun: () => call('/admin/audit/run'),
+  auditRecord: (business_date) => call('/admin/audit/run', { method: 'POST', body: { business_date } }),
+  auditHistory: () => call('/admin/audit/history'),
+  trialBalance: () => call('/admin/ledger/trial-balance'),
+  ledgerAccount: (code) => call(`/admin/ledger/accounts/${encodeURIComponent(code)}`),
 };
 
 /**
