@@ -1,11 +1,60 @@
 # Campus Wallet
 
-A campus wallet for Premier University, Chattogram. Students top up through **SSLCommerz**
-(bKash, Nagad, Rocket, upay, cards), pay the **canteen, photocopy corner and library desk**
-by QR, and send balance to each other. Built to production standards: **money is correct
-under concurrency, and there is a test that proves it.**
+Campus payments for Premier University, Chattogram. A student is shown a **Bangla QR** at
+the counter, pays from whatever app they already have (bKash, Nagad, Rocket, upay, any bank),
+and the payment is matched back to the order automatically — replacing PUC's current process
+of emailing `accounts@puc.ac.bd` a transaction ID by hand.
+
+Built to production standards: **money is correct under concurrency, the books are
+double-entry and provably balanced, and there are tests that prove both.**
 
 [![CI](https://github.com/iparthanth/campus_wallet/actions/workflows/ci.yml/badge.svg)](https://github.com/iparthanth/campus_wallet/actions)
+
+> **The university never holds student money.** That is a legal requirement, not a design
+> preference — see [The zero-float rule](#the-zero-float-rule-read-this-first) below. What
+> PUC must do institutionally before this can collect a single taka is set out in
+> [PUC-HANDOVER.md](PUC-HANDOVER.md).
+
+---
+
+## The zero-float rule (read this first)
+
+The obvious design — students top up a balance and spend it later — is illegal in
+Bangladesh without a licence. Under the **Payment and Settlement Systems Act 2024 s.15(1)**,
+no *person, institution or company* may issue a prepaid payment instrument without
+Bangladesh Bank approval. The Bangla term is **প্রতিষ্ঠান** (*institution*), deliberately
+wider than "company", and it covers a university. Penalties under s.37(1) run to 5 years'
+imprisonment or BDT 50 lakh; s.39 makes the offence **cognizable and non-bailable**; s.38
+reaches officers personally. The "closed-loop exemption" people cite is **not in the enacted
+Act** — it exists only in an unenacted draft.
+
+So money never touches this software:
+
+```
+ Student's app          Acquiring bank            This system
+ (bKash/Nagad/bank)     (licensed PSP)            (PUC = merchant)
+       │                       │                        │
+       │ scans outlet Bangla QR│                        │
+       ├──────────────────────►│                        │
+       │   money moves only on licensed rails           │
+       │                       │  settlement file       │
+       │                       ├───────────────────────►│
+       │                PUC's bank account       order settled, ledger posted
+```
+
+This is enforced, not documented:
+
+- **`zero_float` is the default.** `WALLET_MODE=closed_loop` with `NODE_ENV=production`
+  **throws at boot**, citing the statute. There is no override flag ([`config.js`](api/src/config.js)).
+- **An outlet not onboarded by an acquiring bank cannot trade** — raising an order fails
+  with `NOT_ONBOARDED` and writes *nothing*, so it is impossible to print a QR that would be
+  declined at the counter.
+- Balance-holding remains available outside production for demonstration. That is what makes
+  the production refusal testable rather than aspirational.
+
+**Bangla QR has been mandatory since 1 July 2026** for all banks, MFS providers, PSPs, PSOs
+and merchants, with proprietary QRs ordered replaced. This system emits standards-compliant
+**EMVCo Merchant-Presented QR** payloads ([`banglaQr.js`](api/src/domain/banglaQr.js)).
 
 ---
 
@@ -60,7 +109,9 @@ npm ci && npm run migrate && npm run seed && npm start
 D:\devtools\pgsql\bin\pg_ctl.exe -D D:\devtools\pgdata_wallet stop
 ```
 
-Seeded logins — password `password123` for all:
+Seeded **development** logins — password `password123` for all. `npm run seed` is a local
+convenience and is never run against production; the login screen ships no prefilled
+credentials.
 
 | Account | Role |
 |---|---|
@@ -108,18 +159,28 @@ idempotency key, so a double-click or a flaky-network retry cannot debit twice.
    React SPA
        │  JWT (Bearer)
        ▼
-┌──────────────────────────────────────────┐
-│ Express API                              │
-│  routes/  auth · wallet · topup · campus · admin │
-│  middleware requireAuth · requireAdmin   │
-│  domain/  transfer · charge · topup · fraud · money │  ← pure, testable, no framework
-│  db/        pool · migrate · seed        │
-└───────────────┬──────────────────────────┘
+┌────────────────────────────────────────────────────────────────┐
+│ Express API                                                    │
+│  routes/     auth · wallet · topup · campus · orders · admin   │
+│  middleware  requireAuth · requireAdmin · rateLimit            │
+│  domain/     order · banglaQr · ledger · reconciliation · audit│  ← pure, no framework
+│              transfer · charge · topup · fraud · money         │
+│  jobs/       nightlyAudit                                      │
+│  db/         pool · migrate · seed                             │
+└───────────────┬────────────────────────────────────────────────┘
                 │ node-postgres, explicit SQL (no ORM)
                 ▼
           PostgreSQL 16
-   wallets · transactions · charges · merchants · topups · fraud_flags
-   CHECK balance_paisa >= 0   ← last line of defence
+   ledger_accounts · ledger_postings · ledger_entries      ← the books
+   merchants · charges · settlement_imports · settlement_lines
+   wallets · transactions · topups · fraud_flags · audit_runs
+
+   Invariants live HERE, not in application code:
+     deferred constraint trigger  every posting balances at COMMIT
+     triggers                     entries are never UPDATEd or DELETEd
+     partial unique index         one acquirer txn settles at most one order
+     UNIQUE(content_sha256)       the same statement cannot be imported twice
+     CHECK balance_paisa >= 0     last line of defence (closed-loop demo path)
 ```
 
 **Layering rule:** `domain/` never imports Express and never talks to HTTP. That is why the
@@ -152,14 +213,30 @@ A deliberate pyramid — fast tests at the bottom, few slow ones on top.
 | **Lock semantics** (`lock.semantics`) | **deterministic** — two controlled connections, interleaving forced | seconds |
 | **Concurrency** (`transfer.concurrency`) | parallel requests; invariant checks (money conserved, never negative) | seconds |
 | **Top-up** (`topup.test.js`) | bKash flow against a controllable fake gateway | seconds |
+| **Ledger** (`ledger.test.js`) | balance invariants against **real PostgreSQL triggers**, not mocks | seconds |
+| **Reconciliation** (`reconciliation.test.js`) | settlement import, matching, exception paths | seconds |
 | **E2E** (`e2e/tests/wallet.spec.js`) | real Chrome → React → Express → Postgres | seconds |
 
-**84 tests, all green** — 80 API/unit against a real PostgreSQL 16, plus 4 Playwright E2E flows.
+**300 tests across 19 suites, all green**, against a real PostgreSQL 16 — plus Playwright
+E2E flows through real Chrome.
 
 ```bash
-cd api && npm test              # 80 tests
-cd e2e && npx playwright test   # 4 E2E flows (needs api + web running)
+cd api && npm test              # 300 tests, 19 suites
+cd e2e && npx playwright test   # E2E flows (needs api + web running)
 ```
+
+Two testing decisions worth stating:
+
+**The QR CRC is verified against the catalogue value, not a recalled vector.** CRC-16/CCITT-FALSE
+is proven with the authoritative check `"123456789" → 0x29B1`. An EMVCo specimen payload
+recalled from memory disagreed with its own published CRC — rather than bake an
+unverifiable vector into the suite, it was left out. A test that asserts a value you cannot
+source is worse than no test: it certifies a guess.
+
+**`resetDb` truncates `audit_runs` by name.** `TRUNCATE ... CASCADE` only reaches tables
+that *reference* a truncated one, so a table with no foreign key is silently skipped — which
+leaked audit rows between files until it was tracked down. Any future FK-less table must be
+added there by hand.
 
 E2E seeds balances by writing to the database directly rather than through a `/test/credit`
 endpoint. Shipping a money-creating route inside the production artifact, guarded only by an
@@ -211,18 +288,65 @@ top-5 senders per ISO week (`RANK() OVER`). History uses **keyset pagination** o
 `(created_at, id)`, not `OFFSET`, which degrades linearly and skips rows when data arrives
 mid-scroll.
 
+## The books — double-entry ledger
+
+Every order and every settlement is recorded as a balanced double-entry posting. This is
+what lets PUC's accounts office answer *"where is the money?"* without trusting the
+application, and it is why the invariants are in PostgreSQL rather than in JavaScript:
+
+| Invariant | Enforced by |
+|---|---|
+| Every posting balances (debits = credits) | a **deferred** constraint trigger, checked at `COMMIT` — a plain `CHECK` cannot see sibling rows, so it could be evaded by insert ordering |
+| Entries are never edited or deleted | triggers that reject `UPDATE` and `DELETE` outright |
+| A correction is a **reversal**, never a rewrite | `reverse()` posts the mirror image; the original stays visible |
+| One acquirer transaction settles at most one order | a **partial** unique index `WHERE status = 'MATCHED'` — duplicates are still *recorded* as exceptions rather than silently dropped |
+| The same statement cannot be imported twice | `UNIQUE(content_sha256)` over the exact file bytes |
+
+That last one guards the likeliest operator error: uploading yesterday's statement again and
+doubling the books.
+
+The narrower partial index is worth a note — a globally `UNIQUE` `acquirer_txn_id` was the
+first attempt, and it was wrong: it made the `ALREADY_IMPORTED` exception row itself
+unstorable. The real invariant is *"settles at most one order"*, not *"appears at most
+once"*.
+
+## Reconciliation and the nightly audit
+
+The **Reconcile** screen answers the question an accounts officer actually asks each
+morning: *does what the bank sent us match what we sold, and if not, exactly where?* So the
+exceptions lead and the totals are secondary — a dashboard headlining "৳48,300 collected ✓"
+while burying three unmatched payments in a tab is the same spreadsheet problem in nicer
+colours. Two lists: **money received that no order explains**, and **sold but never paid**.
+
+A nightly job records a permanent verdict:
+
+| Check | Verdict |
+|---|---|
+| Trial balance — total debits equal total credits | **FAIL** (exit 1) |
+| Cross-check — per-outlet order totals agree with the ledger | **FAIL** (exit 1) |
+| Aged receivables / unmatched receipts | **WARN** (exit **0**) |
+
+A WARN exits 0 deliberately. If routine ageing paged somebody nightly, the alert would be
+muted inside a fortnight — and the FAIL would be muted with it.
+
+A failing cross-check answers **HTTP 409**, not 200: the books disagreeing with reality is
+an alarm, not a successful read.
+
 ## Paying on campus
 
-A wallet with nowhere to spend is a transfer app. These are the outlets money actually
-goes to, and how:
+1. Counter staff raise an order — *"that's ৳85"* — which mints an **order reference** like
+   `PUC-3-K9F2QT7M` and the outlet's **Bangla QR** carrying it.
+2. The student pays from their own app. The money goes to PUC's bank account, never here.
+3. The acquirer's settlement file is imported next day and matched to the order.
 
-1. Counter staff raise a charge — *"that's ৳85"* — which mints a **QR** (`campuswallet://pay/<token>`).
-2. The student scans, sees the outlet name and amount, and confirms.
-3. Money moves student wallet → outlet wallet in one locked transaction.
+The reference uses **Crockford base32** — I, L, O and U are excluded — so a reference read
+aloud at a noisy counter or written by hand cannot be mistyped into a *different valid*
+reference. Order tokens are random, not row ids: an incrementing id would let anyone probe
+the next student's bill by guessing a number.
 
-The QR carries a random 72-bit token, **not the row id**: an incrementing id would let
-anyone pay — or probe — the next student's bill by guessing a number. Bills expire after
-10 minutes so one left open at a busy counter does not stay payable all afternoon.
+> The legacy `campuswallet://pay/<token>` flow below is the **closed-loop demo path**. It is
+> the proprietary QR that Bangladesh Bank ordered replaced on 1 July 2026, and production
+> refuses to run in that mode. It is retained because it is what makes the refusal testable.
 
 The hazard here is two phones scanning the same code. The charge row is locked and its
 status re-checked inside the transaction, so the second payer loses cleanly:
@@ -279,10 +403,20 @@ dropped callback on demand. The fake matches the documented request/response sha
 
 Honest about what this is not:
 
-- **No real money.** The bKash integration is sandbox-only; production needs merchant
-  onboarding. Balances are otherwise seeded or admin-credited.
+- **Not yet run against a live acquirer.** It is tested end-to-end against the documented
+  EMVCo standard and against sandbox gateway credentials, but no real merchant account
+  exists yet — that is PUC's step, not a coding one ([PUC-HANDOVER.md](PUC-HANDOVER.md) §5.1).
+  The first live week should be reconciled by hand in parallel.
+- **Settlement matching is next-day**, because acquirers deliver settlement files on a daily
+  cycle. Real-time confirmation needs a per-acquirer webhook, negotiated at onboarding.
+- **Static-QR payments cannot always be matched.** If an outlet shows a fixed printed QR and
+  the payer types the amount, there is no reference in the payment; those land in the
+  exceptions list for a human. Dynamic per-order QR — what this generates — avoids it.
 - **No refresh tokens** — a stolen token stays valid for its 15 minutes.
-- **No rate limiting** on `/auth/*` yet; brute-force protection is a gap.
+- **PDPO 2025 compliance is partial.** Consent capture, retention limits, export and erasure
+  are not yet implemented; the data held is minimal (name, email, phone, transactions) and
+  no payment instrument data ever reaches the system.
+- **One outlet, one operator account** — shift handover on a single counter is not modelled.
 - **Fraud rules are deterministic**, not learned. A scoring model would need labelled fraud
   data this project does not have — and inventing that data would make the numbers a lie.
 - **Single node.** Scaling would mean read replicas and moving fraud evaluation to a queue.

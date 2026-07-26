@@ -12,8 +12,29 @@ import { config } from '../config.js';
  * created or destroyed, inconsistent demo data is worse than no demo data — so the
  * function asserts the ledger reconciles before it commits.
  */
-export async function seed({ silent = false } = {}) {
+export async function seed({ silent = false, ifEmpty = false } = {}) {
   const log = (...a) => { if (!silent) console.log(...a); };
+
+  /*
+   * `ifEmpty` exists for hosted demo deployments, where the seed runs on every boot.
+   *
+   * Without it, a free-tier host that sleeps after 15 minutes idle wipes the database on
+   * each cold start — so an account someone created while looking at the demo is gone by
+   * the time they come back to it. Seeding once, on an empty database, is what "demo data"
+   * is supposed to mean.
+   *
+   * This is a convenience for demos, NOT a safety net for production: it makes a repeated
+   * seed harmless, it does not make the seed safe to point at real data. Production runs
+   * migrations only (DEPLOY.md §A.3).
+   */
+  if (ifEmpty) {
+    const existing = Number((await query('SELECT count(*)::int AS n FROM users')).rows[0].n);
+    if (existing > 0) {
+      log(`seed: skipped — ${existing} user(s) already exist (--if-empty)`);
+      return;
+    }
+  }
+
   const hash = await bcrypt.hash('password123', config.bcryptRounds);
 
   // Opening balances, chosen so the post-transfer balances land on round numbers.
@@ -30,10 +51,24 @@ export async function seed({ silent = false } = {}) {
 
   // The outlets a student actually spends at. Without these it is a P2P app, not a
   // campus wallet: money has nowhere to go except another student.
+  /*
+   * `qr_name` is what the student sees in their banking app when they scan, so it is
+   * capped at the 25 characters EMVCo tag 59 allows and written the way a bank would
+   * approve it — not the friendly name above.
+   *
+   * The acquirer credentials below are DEMONSTRATION PLACEHOLDERS. They are shaped like
+   * the real thing so the Bangla QR flow can be shown end to end on a laptop, but no bank
+   * issued them and a QR built from them will be declined at a real counter. Production
+   * credentials arrive only from acquirer onboarding, which needs PUC's EIIN and a board
+   * resolution (PUC-HANDOVER.md §5.1) — nothing in this repository can shortcut it.
+   */
   const outlets = [
-    { operator: 'canteen@puc.ac.bd', name: 'Central Canteen',   category: 'canteen' },
-    { operator: 'copy@puc.ac.bd',    name: 'Photocopy Corner',  category: 'stationery' },
-    { operator: 'library@puc.ac.bd', name: 'Library Fine Desk', category: 'library' },
+    { operator: 'canteen@puc.ac.bd', name: 'Central Canteen',   category: 'canteen',
+      qrName: 'PUC CENTRAL CANTEEN' },
+    { operator: 'copy@puc.ac.bd',    name: 'Photocopy Corner',  category: 'stationery',
+      qrName: 'PUC PHOTOCOPY CORNER' },
+    { operator: 'library@puc.ac.bd', name: 'Library Fine Desk', category: 'library',
+      qrName: 'PUC LIBRARY DESK' },
   ];
 
   /**
@@ -88,9 +123,22 @@ export async function seed({ silent = false } = {}) {
     for (const o of outlets) {
       const op = (await client.query('SELECT id FROM users WHERE email = $1', [o.operator])).rows[0];
       const w = (await client.query('SELECT id FROM wallets WHERE user_id = $1', [op.id])).rows[0];
-      await client.query(
-        'INSERT INTO merchants (name, category, wallet_id, operator_id) VALUES ($1,$2,$3,$4)',
+      const m = (await client.query(
+        'INSERT INTO merchants (name, category, wallet_id, operator_id) VALUES ($1,$2,$3,$4) RETURNING id',
         [o.name, o.category, w.id, op.id]
+      )).rows[0];
+
+      // Mark the outlet as onboarded so the zero-float counter flow is demonstrable
+      // locally. In production this UPDATE has no code path at all — it is an
+      // administrative step performed only once the acquirer has issued the identifiers.
+      await client.query(
+        `UPDATE merchants
+            SET acquirer_issued = true, acquirer_name = $2, acquirer_guid = $3,
+                acquirer_merchant_id = $4, qr_merchant_name = $5, qr_city = $6,
+                onboarded_at = now()
+          WHERE id = $1`,
+        [m.id, 'DEMO-BANK', 'BD.DEMO.NOTREAL', `DEMO${String(m.id).padStart(7, '0')}`,
+         o.qrName, 'Chattogram']
       );
     }
 
@@ -125,10 +173,15 @@ export async function seed({ silent = false } = {}) {
   )).rows;
   log('seed: ledger reconciles. Password for all accounts: password123');
   for (const r of summary) log(`  ${r.email.padEnd(20)} ৳${(r.balance_paisa / 100).toFixed(2)}`);
+  log('');
+  log('  Outlets are onboarded with DEMONSTRATION acquirer credentials (DEMO-BANK /');
+  log('  BD.DEMO.NOTREAL). The Bangla QR flow works end to end locally, but no bank issued');
+  log('  these identifiers and a QR built from them will be declined at a real counter.');
+  log('  Real credentials come from acquirer onboarding — see PUC-HANDOVER.md §5.1.');
 }
 
 if (process.argv[1] && process.argv[1].endsWith('seed.js')) {
-  seed()
+  seed({ ifEmpty: process.argv.includes('--if-empty') })
     .then(closePool)
     .catch((err) => { console.error('seed failed:', err.message); process.exit(1); });
 }

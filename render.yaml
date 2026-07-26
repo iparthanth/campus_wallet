@@ -18,9 +18,15 @@ services:
     rootDir: api
     buildCommand: npm ci
     # Migrations are forward-only and recorded, so re-running on every boot is a no-op —
-    # safe rather than a deploy-time gamble. Seed runs too so the demo has data; it
-    # truncates first, so remove `&& npm run seed` once real users exist.
-    startCommand: npm run migrate && npm run seed && npm start
+    # safe rather than a deploy-time gamble.
+    #
+    # `--if-empty` is load-bearing. The seed TRUNCATES, and a free instance sleeps after
+    # ~15 minutes idle: an unguarded seed would wipe the database on every cold start, so
+    # any account created while someone was looking at the demo would be gone by the time
+    # they came back. With the guard it seeds once, on first boot, and never again.
+    #
+    # For a real PUC pilot, drop the seed entirely — see DEPLOY.md §A.3.
+    startCommand: npm run migrate && npm run seed -- --if-empty && npm start
     healthCheckPath: /ready
     envVars:
       - key: NODE_ENV
@@ -48,8 +54,11 @@ services:
           property: url
       - key: BCRYPT_ROUNDS
         value: "12"
-      - key: WALLET_MODE
-        value: closed_loop           # switch to zero_float for a lawful BD campus pilot
+      # WALLET_MODE is deliberately NOT set. It defaults to zero_float, the only lawful
+      # mode: the university never holds student balances (Payment and Settlement Systems
+      # Act 2024 s.15(1)). Setting it to closed_loop here would make the API refuse to
+      # start, because NODE_ENV is production above — that refusal is the point, not a bug
+      # to work around. See README "The zero-float rule" and PUC-HANDOVER.md §2.
 
   # ---- Frontend (static React) ----
   - type: web
