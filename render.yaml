@@ -67,12 +67,23 @@ services:
     rootDir: web
     buildCommand: npm ci && npm run build
     staticPublishPath: dist
-    # SPA + API proxy. /api/* is rewritten to the API service so the browser only ever
-    # talks to one origin — no CORS from the user's point of view, no API URL baked in.
+    envVars:
+      # The API's real URL, filled in by Render at build time.
+      #
+      # This replaced a rewrite whose destination was a hardcoded hostname. Render appends
+      # a random suffix to free-tier service names, so that hostname was wrong on every
+      # fresh deploy and the site came up looking fine while every request 404'd — a
+      # manual post-deploy edit that is easy to forget and hard to diagnose.
+      #
+      # Going cross-origin is safe here because the API's CORS_ORIGINS is wired from this
+      # service's URL by the same mechanism, so the two cannot disagree.
+      - key: VITE_API_BASE
+        fromService:
+          type: web
+          name: campus-wallet-api
+          property: url
+    # SPA fallback: every non-asset path serves index.html so client-side routes work.
     routes:
-      - type: rewrite
-        source: /api/*
-        destination: https://campus-wallet-api.onrender.com/*
       - type: rewrite
         source: /*
         destination: /index.html

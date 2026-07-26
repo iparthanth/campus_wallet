@@ -1,5 +1,22 @@
 const TOKEN_KEY = 'cw_token';
 
+/**
+ * Where the API lives.
+ *
+ * Defaults to the same-origin `/api` prefix, which is what development uses (the Vite
+ * proxy forwards it and strips the prefix) and what a host with rewrites uses — the
+ * browser never makes a cross-origin request, so nothing preflights.
+ *
+ * VITE_API_BASE overrides it with an absolute URL, for hosts that cannot rewrite to a
+ * sibling service. Render fills this in from the API service's own URL at build time, so
+ * there is no hostname to paste by hand and nothing to get wrong — the API's CORS_ORIGINS
+ * is wired from the frontend's URL the same way, and the two always agree.
+ *
+ * Note the API mounts its routes at the root (`/auth`, `/wallet`), so the base is a
+ * prefix in both cases and the call sites below are identical either way.
+ */
+const API_BASE = (import.meta.env?.VITE_API_BASE ?? '/api').replace(/\/$/, '');
+
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (t) => localStorage.setItem(TOKEN_KEY, t);
 export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
@@ -22,7 +39,7 @@ async function call(path, { method = 'GET', body, auth = true } = {}) {
 
   let res;
   try {
-    res = await fetch(`/api${path}`, {
+    res = await fetch(`${API_BASE}${path}`, {
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,
