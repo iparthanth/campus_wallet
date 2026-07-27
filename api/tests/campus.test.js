@@ -1,7 +1,3 @@
-import { jest } from '@jest/globals';
-
-jest.setTimeout(30_000);
-
 /**
  * The LEGACY closed-loop counter flow: the student pays from a balance this system holds.
  *

@@ -13,8 +13,6 @@ import {
 } from '../src/domain/reconciliation.js';
 import { balanceOf, trialBalance, post, ACCOUNTS, DEBIT, CREDIT } from '../src/domain/ledger.js';
 
-jest.setTimeout(60_000);
-
 let outlet;
 let staff;
 let txnSeq = 0;

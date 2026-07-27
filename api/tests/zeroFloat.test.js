@@ -1,7 +1,3 @@
-import { jest } from '@jest/globals';
-
-jest.setTimeout(30_000);
-
 /**
  * Zero-float mode — the configuration a real Bangladeshi campus pilot must run in.
  *

@@ -111,7 +111,49 @@ document that can be forgotten.
 5. The next day's settlement file from the acquirer is imported, and each payment is matched
    to its order automatically.
 
-### 3.2 The ledger
+### 3.2 Paying online — the payment gateway
+
+A student can also pay an order **online**, through **SSLCommerz**, Bangladesh's largest
+payment gateway. One session offers **bKash, Nagad, Rocket, upay, DBBL, IBBL, Citytouch,
+City Bank, BRAC Bank** and card payments — 37 methods in total.
+
+This matters for two reasons: it is how a student pays a fee from a hostel room rather than
+at a counter, and it is the path that works when a phone camera will not focus on a QR.
+
+**The money never touches this system.** It goes from the student to PUC's own merchant
+account at the gateway. What this system does is record which order was paid, and prove it:
+
+```
+  1. order raised     DR receivable          CR revenue        goods left the counter
+  2. student pays     DR gateway clearing    CR receivable     the gateway holds the money
+                      DR gateway fee
+  3. gateway settles  DR bank                CR gateway clearing   money reaches PUC
+```
+
+Stage 2 and stage 3 are deliberately separate. SSLCommerz settles on a T+n cycle, so
+between them there is real money that the university has earned but does not yet hold. The
+**clearing** account makes that float visible instead of pretending the cash is already in
+the bank. The gateway's commission is booked as an expense rather than quietly absorbed.
+
+**Verified against the real gateway**, not a simulation:
+
+```
+order_ref   : PUC-1-3KY42NMW           amount: ৳85.00
+methods     : 37 available — bKash, Nagad, upay, DBBL, IBBL, Citytouch, City Bank, BRAC …
+checkout page HTTP: 200
+ledger drift: 0
+```
+
+Payments are confirmed **server-to-server**. The browser returns from the gateway carrying
+parameters a student could edit, so none of them are trusted — only the gateway's own
+answer, checked against the amount the order asked for, marks anything paid. Without that,
+a student could open an ৳85 session and hand-craft a ৳10,000 confirmation.
+
+A student who pays twice — once online, once by scanning the QR — is detected at
+reconciliation and flagged with the amount owed back and the transaction that already
+cleared the order, rather than being silently double-counted.
+
+### 3.3 The ledger
 
 Every order and every settlement is recorded in a **double-entry ledger**. This is not
 decorative — it is what allows the university's accounts office to answer "where is the
@@ -130,7 +172,7 @@ Enforced in PostgreSQL itself, not in application code:
 That last one is the guard against the most likely operator error: uploading the same bank
 statement twice and doubling the books. It is refused.
 
-### 3.3 Reconciliation
+### 3.4 Reconciliation
 
 The **Reconcile** screen is built around the question an accounts officer actually asks each
 morning: *does what the bank sent us match what we sold, and if not, exactly where?*
@@ -144,7 +186,7 @@ The exceptions lead the screen; the totals are secondary. Two lists:
 
 Both are actionable lists of specific transactions, not a summary figure.
 
-### 3.4 The nightly audit
+### 3.5 The nightly audit
 
 An automated job runs three checks and records the verdict permanently:
 
@@ -160,7 +202,7 @@ be muted within a fortnight and the FAIL would be missed with it.
 A FAIL is surfaced to the dashboard as **HTTP 409**, not 200 — a disagreement between the
 books and reality is an alarm, not a successful read.
 
-### 3.5 Verification
+### 3.6 Verification
 
 The system has **300 automated tests across 19 suites, all passing**, covering the ledger
 invariants, the QR encoder, the order flow, reconciliation, the audit job and the HTTP
@@ -178,6 +220,7 @@ phones scan the same QR simultaneously is proven to settle exactly once.
 | Today | With this system |
 |---|---|
 | Student emails `accounts@puc.ac.bd` with transaction details | nothing to email; the reference is in the payment |
+| Fees paid only by internet banking or BEFTN | also payable online by bKash, Nagad, upay, card — 37 methods |
 | Accounts staff retype transaction IDs into a spreadsheet | automatic matching; staff see only what did *not* match |
 | "Has my payment been credited?" answered by hand | answered by the student's own screen |
 | A missed payment is found when someone complains | found by the nightly audit, with the exact transaction |
@@ -264,9 +307,16 @@ Stated plainly, because a proposal that claims no limitations should not be trus
   fixed printed QR and the payer types the amount themselves, there is no order reference in
   the payment. Those land in the exceptions list for a human. Using a **dynamic QR per
   order** — which is what this system generates — avoids the problem entirely.
-- **This has not yet run against a live acquirer.** It is tested end-to-end against the
-  documented EMVCo standard and against sandbox credentials. The first week of a live pilot
-  should be treated as a pilot, reconciled by hand in parallel.
+- **No real money has moved yet, and this is the most important line in this document.**
+  The gateway integration is real and runs against SSLCommerz's own servers, but on their
+  **sandbox** store — test money. Going live needs a merchant account (§5.1, §5.4), which
+  needs PUC's documents. What has been proven is that the integration is correct; what has
+  not been proven is any commercial arrangement. The first week of a live pilot should be
+  treated as a pilot and reconciled by hand in parallel.
+- **The Bangla QR has not been scanned by a real bank app.** The payload is built to the
+  EMVCo standard and its checksum verifies against the published reference value, but only
+  an acquirer-issued merchant identifier makes a QR actually payable, and PUC does not have
+  one yet. Until then the counter refuses to print one at all, by design.
 - **One outlet, one operator account.** Shift handover between two staff on one counter is
   not modelled. If PUC needs per-shift attribution, that is a small addition.
 

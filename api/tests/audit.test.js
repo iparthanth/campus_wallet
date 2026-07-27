@@ -6,8 +6,6 @@ import { importSettlement } from '../src/domain/reconciliation.js';
 import { runAudit, recordAudit, auditHistory, AUDIT_RESULT } from '../src/domain/audit.js';
 import { post, ACCOUNTS, DEBIT, CREDIT } from '../src/domain/ledger.js';
 
-jest.setTimeout(60_000);
-
 let outlet;
 let seq = 0;
 

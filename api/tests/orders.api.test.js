@@ -2,8 +2,6 @@ import { describe, test, expect, beforeEach, afterAll, jest } from '@jest/global
 import { api, resetDb, closeDb, makeUser, makeMerchant, onboardMerchant } from './helpers.js';
 import { query } from '../src/db/pool.js';
 
-jest.setTimeout(60_000);
-
 const auth = (u) => ({ Authorization: `Bearer ${u.token}` });
 
 let outlet;

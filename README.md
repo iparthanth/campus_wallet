@@ -361,22 +361,69 @@ expect(await balanceOf(canteen.id)).toBe(100_00);   // paid once, not twice
 Outlets hold real wallets, so canteen sales are covered by the same money-conservation
 invariant as peer transfers — nothing is created at the counter.
 
-## Topping up — SSLCommerz (real, working)
+## Paying an order online — SSLCommerz (real, working)
 
-**SSLCommerz** is Bangladesh's largest gateway and fronts bKash, Nagad, Rocket, upay, TAP
-and the major banks in one session. Its sandbox runs on published test credentials, so
-this integration works end to end **with no merchant agreement** — clone the repo and a
-real gateway session opens against SSLCommerz's own servers.
+**SSLCommerz** is Bangladesh's largest gateway and fronts bKash, Nagad, Rocket, upay and
+the major banks in one session. Its sandbox runs on published test credentials, so this
+integration works end to end **with no merchant agreement** — clone the repo and a real
+gateway session opens against SSLCommerz's own servers. Verified live:
 
-The security boundary is `validatePayment()`. The browser comes back from the gateway with
-parameters a user can edit, so none of them are trusted: only the server-to-server
-validation response moves money, and the settled amount is compared against what the
-top-up expected. Without that check a student could open a ৳10 session and hand-craft a
-৳10,000 success URL.
+```
+tran_id     : PUCORD-PUC-1-3KY42NMW-1785095863709
+methods     : 37 available
+BD methods  : bKash, Nagad, upay, DBBL Mobile Banking, IBBL, Citytouch,
+              City Bank, BRAC Bank, MYCASH, QCash, Fast Cash …
+checkout page HTTP: 200
+ledger drift: 0
+```
 
-Two paths credit a wallet — the browser redirect and the server-to-server IPN — because on
-Bangladeshi mobile data the redirect frequently never arrives. Crediting is idempotent, so
-both racing is harmless.
+> **This was the biggest hole in the project, and it is worth stating plainly.** SSLCommerz
+> was integrated and worked — but it was wired *only* to `/topup`, which does
+> `UPDATE wallets SET balance_paisa = ...`. That is the closed-loop path production
+> [refuses to boot into](#the-zero-float-rule-read-this-first). The lawful order flow had no
+> gateway at all. Every component passed its own tests; nothing tested the composition, so
+> in the mode this system actually ships, **a student could not pay online.** The fix was a
+> re-wiring, not a rewrite: the same gateway client now settles one specific order through
+> the ledger.
+
+Payment is modelled in **three stages**, because money does not go straight from the student
+to the university's bank and pretending it does is how reconciliation starts lying:
+
+```
+1. order raised     DR receivable        CR revenue          goods left the counter
+2. student pays     DR gateway clearing  CR receivable       the gateway holds the money
+                    DR gateway fee
+3. gateway settles  DR bank              CR gateway clearing money reaches PUC
+```
+
+SSLCommerz settles on a T+n cycle, so between stages 2 and 3 there is real money the
+university has earned but does not hold. `clearing` makes that float visible rather than
+booking cash that has not arrived. The commission is an expense, not a silent shortfall.
+
+The security boundary is `validatePayment()`. The browser returns from the gateway with
+parameters a user can edit, so none are trusted: only the server-to-server response settles
+anything, and the amount is checked against what the order asked for. Without that check a
+student could open an ৳85 session and hand-craft a ৳10,000 confirmation.
+
+Two paths settle — the browser redirect and the IPN — because on Bangladeshi mobile data the
+redirect frequently never arrives. Settlement is idempotent, so both racing is harmless, and
+a test fires them concurrently to prove exactly one wins.
+
+**The IPN distinguishes permanent from transient failures.** A permanent one (unknown
+transaction, amount mismatch) acks `202` — retrying will never help. A transient one
+(database unreachable) returns `500` so the gateway retries. The legacy top-up handler acks
+everything, which silently drops a real payment whenever the database happens to be down.
+
+An order can now be paid on two rails — gateway or Bangla QR — so paying twice is possible.
+Reconciliation detects it and reports the amount owed back plus the transaction that already
+cleared the order, instead of crediting the receivable twice and driving it negative. That
+would not have been caught by the trial balance, because each posting is internally balanced.
+
+## Topping up — the legacy closed-loop path
+
+`/topup/*` credits `wallets.balance_paisa`. It is the **demo path only**: production refuses
+to boot in `closed_loop`, so these routes are unreachable in a real deployment. Retained
+because it is what makes the production refusal testable.
 
 ## bKash direct (sandbox, currently disabled)
 

@@ -1,7 +1,4 @@
-import { jest } from '@jest/globals';
 import { startFakeBkash } from './fake-bkash.js';
-
-jest.setTimeout(30_000);
 
 // bKash config must exist BEFORE config.js is imported, so the modules are pulled in
 // dynamically after the fake server is up and the env is set.

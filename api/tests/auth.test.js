@@ -1,9 +1,6 @@
-import { jest } from '@jest/globals';
 import jwt from 'jsonwebtoken';
 import { api, makeUser, resetDb, closeDb } from './helpers.js';
 import { config } from '../src/config.js';
-
-jest.setTimeout(30_000);
 
 beforeEach(resetDb);
 afterAll(closeDb);

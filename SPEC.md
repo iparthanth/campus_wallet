@@ -152,6 +152,13 @@ settlement_lines(id, import_id FK, acquirer_txn_id, order_ref NULL,
                  created_at,
                  CHECK gross_paisa = net_paisa + fee_paisa,
                  CHECK matched lines are linked to a charge and a posting)
+order_payments(id, charge_id FK, gateway, tran_id UNIQUE, session_key,
+               amount_paisa CHECK > 0,
+               status ['INITIATED','PAID','FAILED','CANCELLED','MISMATCH'],
+               val_id, method, bank_tran_id, gateway_amount_paisa, fee_paisa,
+               ledger_posting_id FK, note, created_at, paid_at,
+               CHECK a PAID row has val_id AND ledger_posting_id AND paid_at)
+  UNIQUE(charge_id) WHERE status = 'PAID'   -- an order settles online at most once
 audit_runs(id, business_date, result audit_result['PASS','WARN','FAIL'],
            trial_balance_drift_paisa, cross_check_discrepancies,
            unsettled_paisa, unsettled_count, aged_count, unmatched_receipts,
@@ -179,6 +186,11 @@ firing at 00:05 is auditing yesterday, and conflating the two is off by one ever
 | POST | `/orders` | Bearer¹ | 201 `{order_ref, qr_payload}` · 422 validation · 409 `NOT_ONBOARDED` |
 | GET | `/orders/:token` | Bearer | 200 order (never the QR payload) · 404 |
 | GET | `/outlet/summary` | Bearer¹ | 200 takings and outstanding |
+| POST | `/orders/:token/pay/ssl` | Bearer | 201 `{gateway_url, tran_id, methods}` · 409 `ALREADY_PAID` / `PAYMENT_IN_PROGRESS` / `ORDER_EXPIRED` · 503 `GATEWAY_DISABLED` |
+| GET | `/orders/:token/payments` | Bearer | 200 every attempt, including failures |
+| POST | `/orders/ssl/return` | — | 302 back into the app (browser redirect; nothing trusted) |
+| POST | `/orders/ssl/ipn` | — | 200 settled · **202 permanent failure** · **500 transient, retry** |
+| GET | `/admin/reconciliation/clearing` | Bearer+admin | 200 money the gateway still holds |
 | POST | `/admin/settlements/import` | Bearer+admin | 201 `{line_count, matched_count, exception_count}` · 409 duplicate statement |
 | GET | `/admin/reconciliation/exceptions` | Bearer+admin | 200 unmatched receipts + unsettled orders |
 | GET | `/admin/reconciliation/cross-check` | Bearer+admin | 200 agree · **409 disagree** |
@@ -196,6 +208,36 @@ Returning 200 with a `discrepancy` field invites a caller to ignore it.
 
 `GET /orders/:token` deliberately never returns the QR payload. The payload is the payment
 instrument; only the counter that raised the order needs it.
+
+**The IPN's status code is part of the contract.** SSLCommerz retries on 5xx. A permanent
+failure (unknown transaction, amount mismatch) acks `202` — retrying will never succeed. A
+transient one (database unreachable) returns `500` so the gateway retries. Acking everything
+silently drops a real payment whenever the database happens to be down at that moment.
+
+## 3a · Paying an order online
+
+Money moves in **three stages**, and the separation is the point:
+
+| Stage | Debit | Credit | Meaning |
+|---|---|---|---|
+| order raised | `RECEIVABLE:ORDERS` | `REVENUE:MERCHANT` | goods left the counter |
+| student pays | `CLEARING:SSLCOMMERZ` + `EXPENSE:FEE` | `RECEIVABLE:ORDERS` | the gateway holds the money |
+| gateway settles | `BANK` | `CLEARING:SSLCOMMERZ` | money reaches PUC |
+
+SSLCommerz settles on a T+n cycle, so between stages 2 and 3 there is real money the
+university has earned but does not hold. Booking straight to `BANK` at stage 2 would show
+cash that has not arrived.
+
+**An order can be settled on two independent rails** — the gateway (immediate) or Bangla QR
+(next-day statement). If both fire, the student really has paid twice. Reconciliation
+returns `DUPLICATE_REF`, posts nothing, and records which earlier transaction cleared the
+order and how much is owed back. Settling it a second time would credit the receivable twice
+and drive it negative — and the **trial balance would still pass**, because each posting is
+internally balanced, so only the next morning's cross-check would notice.
+
+A `MISMATCH` row is committed and the error raised *afterwards*. Throwing inside the
+transaction would roll back the very record of the failure: the rejection must undo the
+money movement, the audit trail must survive it.
 
 ## 4 · Nightly audit
 

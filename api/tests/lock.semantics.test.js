@@ -1,8 +1,5 @@
-import { jest } from '@jest/globals';
 import { pool, query } from '../src/db/pool.js';
 import { makeUser, resetDb, closeDb } from './helpers.js';
-
-jest.setTimeout(30_000);
 
 beforeEach(resetDb);
 afterAll(closeDb);

@@ -5,8 +5,6 @@ import { raiseOrder, getOrder, outletSummary, makeOrderRef, qrForOutlet, OrderEr
 import { verifyBanglaQr, parseBanglaQr, parseTlv } from '../src/domain/banglaQr.js';
 import { balanceOf, trialBalance } from '../src/domain/ledger.js';
 
-jest.setTimeout(30_000);
-
 let outlet;
 
 beforeEach(async () => {

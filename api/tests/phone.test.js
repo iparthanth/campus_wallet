@@ -1,9 +1,6 @@
-import { jest } from '@jest/globals';
 import { api, makeUser, resetDb, closeDb } from './helpers.js';
 import { query } from '../src/db/pool.js';
 import { normalizeBdPhone } from '../src/services/sms.js';
-
-jest.setTimeout(30_000);
 
 beforeEach(resetDb);
 afterAll(closeDb);

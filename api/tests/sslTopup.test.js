@@ -1,7 +1,4 @@
-import { jest } from '@jest/globals';
 import { startFakeSsl } from './fake-sslcommerz.js';
-
-jest.setTimeout(30_000);
 
 // Config reads env at import time, so the fake's URL must be set before the modules load.
 let fake, api, makeUser, balanceOf, resetDb, closeDb, query, startSslTopup, completeSslTopup;

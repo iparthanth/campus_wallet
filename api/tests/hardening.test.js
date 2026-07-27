@@ -1,8 +1,5 @@
-import { jest } from '@jest/globals';
 import { api, makeUser, resetDb, closeDb } from './helpers.js';
 import { __resetRateLimits } from '../src/middleware/rateLimit.js';
-
-jest.setTimeout(30_000);
 
 beforeEach(async () => {
   await resetDb();

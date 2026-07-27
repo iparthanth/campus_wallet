@@ -1,7 +1,4 @@
-import { jest } from '@jest/globals';
 import { api, makeUser, balanceOf, resetDb, closeDb } from './helpers.js';
-
-jest.setTimeout(30_000);
 
 beforeEach(resetDb);
 afterAll(closeDb);
