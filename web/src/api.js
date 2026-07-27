@@ -102,6 +102,10 @@ export const api = {
   raiseOrder: (amount_paisa, memo) => call('/orders', { method: 'POST', body: { amount_paisa, memo } }),
   order: (token) => call(`/orders/${encodeURIComponent(token)}`),
   outletSummary: () => call('/outlet/summary'),
+  // Pay ONE order through the gateway. Returns the hosted checkout URL to send the
+  // student to — the money goes to PUC's merchant account, never to a balance here.
+  payOrderOnline: (token) => call(`/orders/${encodeURIComponent(token)}/pay/ssl`, { method: 'POST' }),
+  orderPayments: (token) => call(`/orders/${encodeURIComponent(token)}/payments`),
 
   // ---------------------------------------------------------------- reconciliation (admin)
   importSettlement: (payload) => call('/admin/settlements/import', { method: 'POST', body: payload }),

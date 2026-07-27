@@ -159,12 +159,33 @@ function assertBalanced(entries) {
  * Each entry names its account by SPEC (see ACCOUNTS), not by id, so callers never have
  * to resolve accounts themselves and a missing account is created rather than throwing.
  */
+/**
+ * Run `fn` inside the caller's transaction if one was handed in, otherwise open our own.
+ *
+ * withTransaction() is NOT re-entrant: it takes a fresh connection and runs an independent
+ * transaction. So a caller who was already inside a transaction and called post() got a
+ * SECOND connection and a SECOND transaction that committed on its own. If the caller then
+ * failed, its work rolled back while the ledger posting stayed — a posting for an order
+ * that does not exist. The trial balance still balanced (the posting is internally
+ * balanced), so the nightly audit passed while the cross-check reported a phantom
+ * receivable. It also held two pool connections per write, which is a connection-exhaustion
+ * deadlock under load.
+ *
+ * Passing the client through is the fix, and it matches how ensureAccount() already works.
+ */
+function inTransaction(client, fn) {
+  return client ? fn(client) : withTransaction(fn);
+}
+
 export async function post({
   idempotencyKey,
   kind,
   description = null,
   occurredAt = null,
   entries,
+  // Supply this when the caller is already inside a transaction, so the posting commits
+  // or rolls back WITH the rest of the caller's work rather than independently of it.
+  client = null,
 }) {
   if (typeof idempotencyKey !== 'string' || idempotencyKey.length < 8 || idempotencyKey.length > 200) {
     throw new LedgerError(422, 'BAD_IDEMPOTENCY_KEY',
@@ -175,7 +196,7 @@ export async function post({
   }
   assertBalanced(entries);
 
-  return withTransaction(async (client) => {
+  return inTransaction(client, async (client) => {
     // Replay check first — cheap, and short-circuits before any account is created.
     const prior = await client.query(
       `SELECT id, idempotency_key, kind, status, description, occurred_at, created_at
@@ -229,12 +250,12 @@ export async function post({
  * points at the posting that reversed it. An auditor can see both the mistake and the
  * correction, which is the entire reason to keep an append-only ledger.
  */
-export async function reverse({ postingId, idempotencyKey, reason }) {
+export async function reverse({ postingId, idempotencyKey, reason, client = null }) {
   if (!reason || String(reason).trim().length < 3) {
     throw new LedgerError(422, 'NO_REASON', 'A reversal must record why it happened');
   }
 
-  return withTransaction(async (client) => {
+  return inTransaction(client, async (client) => {
     const orig = await client.query(
       'SELECT id, kind, status, description FROM ledger_postings WHERE id = $1 FOR UPDATE',
       [postingId]

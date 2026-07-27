@@ -60,6 +60,28 @@ export default function PayCharge({ balancePaisa, onPaid, onCancel }) {
     }
   }
 
+  /**
+   * Hand the student to the gateway's hosted page.
+   *
+   * A full navigation, not a popup or an iframe: the payment page must be able to show its
+   * own address bar and certificate. A page asking for bKash credentials inside someone
+   * else's iframe is indistinguishable from a phishing page, and teaching students to
+   * accept that is a genuinely harmful habit.
+   */
+  async function payOnline() {
+    setBusy(true);
+    setError('');
+    try {
+      const session = await api.payOrderOnline(order.token);
+      window.location.href = session.gateway_url;
+    } catch (err) {
+      setError(err.code === 'PAYMENT_IN_PROGRESS'
+        ? 'A payment for this order is already open in another tab. Finish or cancel it first.'
+        : err.message);
+      setBusy(false);
+    }
+  }
+
   /* ------------------------------------------------------- zero-float: lookup only */
   if (order && !holdsBalance) {
     const settled = order.status === 'paid';
@@ -75,10 +97,23 @@ export default function PayCharge({ balancePaisa, onPaid, onCancel }) {
           </Message>
         ) : (
           <>
+            {/*
+              Two ways to pay the SAME order, and neither touches a balance here. The QR is
+              faster at a counter; the button matters when the student is not standing at
+              one — paying a fee from a hostel room, or when a camera will not focus.
+            */}
+            <button className="btn btn-block" onClick={payOnline} disabled={busy}
+                    data-testid="btn-pay-online" style={{ marginTop: 'var(--s4)' }}>
+              {busy ? 'Opening gateway…' : `Pay ৳${(order.amount_paisa / 100).toFixed(2)} online`}
+            </button>
+            <p className="field-hint" style={{ textAlign: 'center' }}>
+              bKash · Nagad · Rocket · upay · cards · internet banking
+            </p>
+
             <Message kind="info">
-              <strong>Pay from your own app.</strong> Scan the Bangla QR on the counter screen
-              with bKash, Nagad, Rocket, upay or any bank app. The university does not hold a
-              balance for you, so there is nothing to pay from here.
+              <strong>Or scan the Bangla QR</strong> on the counter screen with any bank or
+              MFS app. Either way the money goes to the university&rsquo;s own account — this
+              system never holds a balance for you.
             </Message>
             {/*
               The reference is the student's protection. If a payment goes astray, this is

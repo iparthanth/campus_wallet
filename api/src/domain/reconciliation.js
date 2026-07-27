@@ -97,6 +97,55 @@ export function normaliseLine(raw) {
  * Runs inside the import transaction. Returns the status and any note, so the caller can
  * record every line — including the ones that settled nothing, which are the valuable ones.
  */
+/**
+ * What to do when a statement line names an order that was ALREADY paid online.
+ *
+ * The student has genuinely paid twice — once through the gateway, once by scanning the
+ * counter's Bangla QR. Both payments are real money that has actually moved. The question
+ * is what the reconciliation should record, and it is a policy question rather than a
+ * technical one:
+ *
+ *   (a) REFUSE — return DUPLICATE_REF. The line settles nothing and lands in the
+ *       exceptions list for a human to refund. Safest for the books: the receivable is
+ *       already cleared and stays cleared. But the second payment then sits in the bank
+ *       account unexplained until somebody acts on the exception.
+ *
+ *   (b) BOOK AS A REFUND DUE — settle nothing against the order, but post the money to a
+ *       liability account (money PUC holds that belongs to a student). The books then show
+ *       the obligation explicitly instead of leaving it implied by an exception row.
+ *       More correct accounting; more machinery.
+ *
+ *   (c) UNMATCHED — treat it like any payment we cannot explain. Simple and consistent
+ *       with the static-QR case, but loses the information that we know exactly who paid
+ *       twice and for what, which is precisely what makes the refund actionable.
+ *
+ * CHOSEN: (a) REFUSE AND FLAG.
+ *
+ * The receivable was already cleared by the online payment, so settling this line a second
+ * time would credit it twice and drive it negative. Nothing is posted. The line is recorded
+ * with everything a person needs to act: which order, which earlier payment cleared it, and
+ * how much is owed back. That second payment does sit in PUC's bank account unexplained
+ * until someone works the exception — which is exactly why the note names the amount and
+ * the prior transaction rather than saying "duplicate".
+ *
+ * @param {object}  args
+ * @param {object}  args.line   the normalised statement line (grossPaisa, orderRef, acquirerTxnId)
+ * @param {object}  args.order  the charge row (id, amount_paisa, merchant_id, merchant_name)
+ * @param {object}  args.prior  the earlier online payment (tran_id, gateway, gateway_amount_paisa, paid_at)
+ * @returns {{status: string, note: string, chargeId: number|null, postingId: null}}
+ */
+function doublePaymentPolicy({ line, order, prior }) {
+  return {
+    status: LINE_STATUS.DUPLICATE_REF,
+    note:
+      `Order ${line.orderRef} was already paid online via ${prior.gateway} ` +
+      `(${prior.tran_id}). This statement line is a SECOND payment of ` +
+      `${line.grossPaisa} paisa and a refund is owed to the student.`,
+    chargeId: Number(order.id),
+    postingId: null,
+  };
+}
+
 async function reconcileLine(client, line) {
   // Invariant 2: this exact bank transaction has been seen before.
   const seen = await client.query(
@@ -147,6 +196,30 @@ async function reconcileLine(client, line) {
       chargeId: order.id,
       postingId: null,
     };
+  }
+
+  /*
+   * The SECOND way an order can already be paid.
+   *
+   * Since migration 010 an order can be settled on two independent rails: the gateway
+   * (immediate) or Bangla QR (this next-day statement). The check above only catches a
+   * previous STATEMENT line. If a student paid online and the acquirer's file ALSO carries
+   * that reference, matching here would post a second settlement — crediting the receivable
+   * twice and driving it negative.
+   *
+   * It would not be caught by the trial balance, because each posting is internally
+   * balanced. Only the next morning's cross-check would notice, which is far too late:
+   * by then the money is banked and the student is owed a refund nobody logged.
+   */
+  const paidOnline = await client.query(
+    `SELECT tran_id, gateway, gateway_amount_paisa, paid_at
+       FROM order_payments
+      WHERE charge_id = $1 AND status = 'PAID'`,
+    [order.id]
+  );
+
+  if (paidOnline.rowCount > 0) {
+    return doublePaymentPolicy({ line, order, prior: paidOnline.rows[0] });
   }
 
   // Exact to the paisa. A partial payment is a business conversation, not something to
@@ -246,6 +319,10 @@ export async function importSettlement({
         });
 
         const { posting } = await post({
+          // Same reason as raiseOrder: without the client this commits on its own
+          // connection, so a failed settlement_lines INSERT below would leave the money
+          // posted to the ledger with no line to explain it.
+          client,
           idempotencyKey: `settle-${line.acquirerTxnId}`,
           kind: 'SETTLEMENT_MATCHED',
           description: `${acquirer} settled ${line.orderRef}`,

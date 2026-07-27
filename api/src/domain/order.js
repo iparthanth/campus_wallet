@@ -130,6 +130,10 @@ export async function raiseOrder({ operatorUserId, amountPaisa, memo = null }) {
 
     // Revenue is recognised now: the student is walking away with the food.
     const { posting } = await post({
+      // Joins THIS transaction. Without the client, the posting would commit on its own
+      // connection and survive a failure of the charges INSERT below — a receivable for an
+      // order that never existed.
+      client,
       idempotencyKey: `order-raised-${orderRef}`,
       kind: 'ORDER_RAISED',
       description: memo ? `${outlet.name}: ${memo}` : `${outlet.name} counter order`,

@@ -14,8 +14,28 @@ import { config } from '../config.js';
 
 const form = (obj) => new URLSearchParams(Object.entries(obj).map(([k, v]) => [k, String(v)]));
 
-/** Opens a payment session and returns the URL to send the student to. */
-export async function initiatePayment({ amountPaisa, tranId, customer, callbackBase }) {
+/**
+ * Opens a payment session and returns the URL to send the student to.
+ *
+ * `returnPath` / `ipnPath` are parameters rather than constants because there are two
+ * genuinely different destinations for a payment. The legacy top-up path credits a wallet
+ * balance; the order path settles one specific order through the ledger. They must not
+ * share a callback — a confirmation routed to the wrong handler would either credit a
+ * balance nobody asked for or settle an order nobody paid for.
+ *
+ * `product` is what the student sees on the gateway's own page. It is worth getting right:
+ * "Campus Wallet top-up" on a screen where someone is paying for lunch reads as a mistake,
+ * and a payment page that looks wrong is a payment page people abandon.
+ */
+export async function initiatePayment({
+  amountPaisa,
+  tranId,
+  customer,
+  callbackBase,
+  returnPath = '/topup/ssl/return',
+  ipnPath = '/topup/ssl/ipn',
+  product = { name: 'Campus Wallet top-up', category: 'topup' },
+}) {
   const res = await fetch(`${config.ssl.baseUrl}/gwprocess/v4/api.php`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -26,10 +46,10 @@ export async function initiatePayment({ amountPaisa, tranId, customer, callbackB
       total_amount: (amountPaisa / 100).toFixed(2),
       currency: 'BDT',
       tran_id: tranId,
-      success_url: `${callbackBase}/topup/ssl/return`,
-      fail_url: `${callbackBase}/topup/ssl/return`,
-      cancel_url: `${callbackBase}/topup/ssl/return`,
-      ipn_url: `${callbackBase}/topup/ssl/ipn`,
+      success_url: `${callbackBase}${returnPath}`,
+      fail_url: `${callbackBase}${returnPath}`,
+      cancel_url: `${callbackBase}${returnPath}`,
+      ipn_url: `${callbackBase}${ipnPath}`,
       cus_name: customer.name,
       cus_email: customer.email,
       cus_phone: customer.phone ?? '01700000000',
@@ -37,8 +57,8 @@ export async function initiatePayment({ amountPaisa, tranId, customer, callbackB
       cus_city: 'Chattogram',
       cus_postcode: '4000',
       cus_country: 'Bangladesh',
-      product_name: 'Campus Wallet top-up',
-      product_category: 'topup',
+      product_name: product.name,
+      product_category: product.category,
       product_profile: 'non-physical-goods',
       shipping_method: 'NO',
     }),

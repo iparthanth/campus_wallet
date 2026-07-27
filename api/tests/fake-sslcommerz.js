@@ -18,6 +18,10 @@ export function startFakeSsl() {
     failValidation: false, // next validate returns FAILED
     amountOverrideTaka: null, // next validate reports this amount instead of the real one
     validatedOnce: new Set(), // tranIds already validated once (to simulate VALIDATED replay)
+    // What the gateway will actually pay out. Real SSLCommerz returns store_amount =
+    // amount - its commission, and the difference is the only way to learn the fee.
+    // Null means "no fee", which keeps the existing top-up tests unchanged.
+    storeAmountTaka: null,
   };
 
   // POST session create — returns the gateway URL the student would be sent to.
@@ -56,11 +60,14 @@ export function startFakeSsl() {
     state.validatedOnce.add(tranId);
     const amount = state.amountOverrideTaka ?? session.amountTaka;
     state.amountOverrideTaka = null;
+    const storeAmount = state.storeAmountTaka ?? amount;
+    state.storeAmountTaka = null;
 
     res.json({
       status: replay ? 'VALIDATED' : 'VALID',
       tran_id: tranId,
       amount: amount.toFixed(2),
+      store_amount: storeAmount.toFixed(2),
       currency: 'BDT',
       card_type: 'bKash-bKash',
       bank_tran_id: `BNK-${tranId}`,

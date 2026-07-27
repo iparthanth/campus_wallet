@@ -1,7 +1,12 @@
-import { Router } from 'express';
+import { Router, urlencoded } from 'express';
 import { z } from 'zod';
+import { config } from '../config.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { raiseOrder, getOrder, outletSummary, OrderError } from '../domain/order.js';
+import {
+  startOrderPayment, confirmOrderPayment, closeOrderPayment,
+  paymentsForOrder, clearingOutstanding,
+} from '../domain/orderPayment.js';
 import { importSettlement, exceptionReport, crossCheck, ReconciliationError } from '../domain/reconciliation.js';
 import { runAudit, recordAudit, auditHistory } from '../domain/audit.js';
 import { balanceOf, statement, trialBalance, LedgerError } from '../domain/ledger.js';
@@ -65,7 +70,112 @@ ordersRouter.get('/orders/:token', requireAuth, async (req, res, next) => {
   } catch (err) { return handle(err, res, next); }
 });
 
+/* ------------------------------------------------- paying an order online (gateway) */
+
+/**
+ * Start an online payment for one order.
+ *
+ * This is the lawful gateway path: the student pays THIS order, the money goes to the
+ * university's merchant account, and the ledger records it against the order. Nothing is
+ * credited to a balance, because the university may not hold one.
+ */
+ordersRouter.post('/orders/:token/pay/ssl', requireAuth, async (req, res, next) => {
+  try {
+    return res.status(201).json(await startOrderPayment({
+      token: req.params.token,
+      payerUserId: req.user.id,
+    }));
+  } catch (err) { return handle(err, res, next); }
+});
+
+/** Every payment attempt for an order — the history someone needs when chasing a payment. */
+ordersRouter.get('/orders/:token/payments', requireAuth, async (req, res, next) => {
+  try {
+    return res.json(await paymentsForOrder(req.params.token));
+  } catch (err) { return handle(err, res, next); }
+});
+
+/**
+ * Where SSLCommerz sends the student's BROWSER back.
+ *
+ * Every parameter here is attacker-editable, so none is trusted: only `val_id` is used,
+ * and only to ask the gateway server-to-server what actually happened.
+ */
+ordersRouter.post('/orders/ssl/return', urlencoded({ extended: true }), async (req, res) => {
+  const { val_id: valId, status, tran_id: tranId } = req.body ?? {};
+  const app = config.ssl.appUrl;
+
+  if (status !== 'VALID' && status !== 'VALIDATED') {
+    // Release the session so the student can immediately try again rather than being told
+    // a payment is already in progress for an order they just abandoned.
+    if (tranId) {
+      await closeOrderPayment({
+        tranId,
+        status: status === 'FAILED' ? 'FAILED' : 'CANCELLED',
+        note: `Gateway reported ${status}`,
+      }).catch(() => { /* best effort — the IPN is the reliable path */ });
+    }
+    return res.redirect(302, `${app}/?order=${status === 'FAILED' ? 'failed' : 'cancelled'}`);
+  }
+
+  try {
+    const out = await confirmOrderPayment({ valId });
+    return res.redirect(302, `${app}/?order=paid&ref=${encodeURIComponent(out.payment.order_ref)}`);
+  } catch (err) {
+    console.error(JSON.stringify({ level: 'error', msg: 'order ssl return failed', detail: err.message }));
+    return res.redirect(302, `${app}/?order=error&code=${encodeURIComponent(err.code ?? 'UNKNOWN')}`);
+  }
+});
+
+/**
+ * Server-to-server notification — the path that actually works.
+ *
+ * On Bangladeshi mobile data the browser redirect frequently never arrives: the student
+ * backgrounds the app, the connection drops, the tab closes. The IPN still lands.
+ * Settlement is idempotent, so the IPN racing the redirect is harmless.
+ *
+ * The status code matters more than it looks. SSLCommerz retries on a 5xx, so:
+ *   - a PERMANENT failure (unknown transaction, amount mismatch) acks 202. Retrying will
+ *     never succeed and would just fill the log with the same error forever.
+ *   - a TRANSIENT failure (database unreachable) returns 500 so the gateway retries. The
+ *     legacy top-up handler acks everything, which silently drops a real payment whenever
+ *     the database happens to be down at that moment.
+ */
+const PERMANENT_IPN_FAILURES = new Set([
+  'UNKNOWN_PAYMENT', 'AMOUNT_MISMATCH', 'PAYMENT_NOT_VALID', 'NO_VAL_ID', 'NO_ORDER',
+  // A duplicate is permanent by definition — the order is already settled and no amount of
+  // retrying changes that. It is recorded for refund, not retried.
+  'ALREADY_SETTLED',
+]);
+
+ordersRouter.post('/orders/ssl/ipn', urlencoded({ extended: true }), async (req, res) => {
+  const valId = req.body?.val_id;
+  if (!valId) return res.status(400).json({ error: { code: 'NO_VAL_ID', message: 'val_id required' } });
+
+  try {
+    const out = await confirmOrderPayment({ valId });
+    return res.json({ settled: out.settled, replayed: out.replayed });
+  } catch (err) {
+    const permanent = PERMANENT_IPN_FAILURES.has(err.code);
+    console.error(JSON.stringify({
+      level: 'error', msg: 'order ssl ipn failed', code: err.code ?? null,
+      permanent, detail: err.message,
+    }));
+    return permanent
+      ? res.status(202).json({ received: true, code: err.code })
+      : res.status(500).json({ error: { code: 'RETRY', message: 'Temporary failure — please retry' } });
+  }
+});
+
 /* --------------------------------------------------------- reconciliation (admin) */
+
+/** Money the gateway is holding: collected from students, not yet in PUC's bank account. */
+ordersRouter.get('/admin/reconciliation/clearing', requireAuth, requireAdmin, async (_req, res, next) => {
+  try {
+    return res.json(await clearingOutstanding());
+  } catch (err) { return handle(err, res, next); }
+});
+
 
 const settlementSchema = z.object({
   acquirer: z.string().trim().min(2).max(40),
