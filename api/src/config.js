@@ -116,10 +116,23 @@ export const config = {
     baseUrl: process.env.SSL_BASE_URL ?? 'https://sandbox.sslcommerz.com',
     storeId: process.env.SSL_STORE_ID ?? 'testbox',
     storePassword: process.env.SSL_STORE_PASSWORD ?? 'qwerty',
-    // Where SSLCommerz sends the student back. Must be reachable BY THE GATEWAY,
-    // so on a laptop this needs a tunnel; in production it is the API's public URL.
-    callbackBase: process.env.PUBLIC_API_URL ?? 'http://localhost:3000',
-    appUrl: process.env.PUBLIC_APP_URL ?? 'http://localhost:5173',
+    /*
+     * Where SSLCommerz sends the student back, and where it posts its IPN.
+     *
+     * Must be reachable BY THE GATEWAY, so on a laptop this needs a tunnel; in production
+     * it is this service's own public URL.
+     *
+     * RENDER_EXTERNAL_URL is injected by Render automatically, which is why the blueprint
+     * declares no `fromService` reference for it. That matters: `fromService` between two
+     * services that each need the other's URL is a circular dependency Render refuses to
+     * apply, and a service referring to ITSELF risks being read the same way. Taking the
+     * value from the platform removes the question entirely.
+     *
+     * The app and the API share one origin in production, so appUrl resolves to the same
+     * place — there is no separate frontend host to point at.
+     */
+    callbackBase: process.env.PUBLIC_API_URL ?? process.env.RENDER_EXTERNAL_URL ?? 'http://localhost:3000',
+    appUrl: process.env.PUBLIC_APP_URL ?? process.env.RENDER_EXTERNAL_URL ?? 'http://localhost:5173',
   },
 
   // SMS for phone verification. With no credentials the console provider runs instead,

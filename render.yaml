@@ -50,19 +50,14 @@ services:
           property: connectionString
       - key: BCRYPT_ROUNDS
         value: "12"
-      # PUBLIC_API_URL is what SSLCommerz redirects back to and posts its IPN to, so it must
-      # be the address the GATEWAY can reach — not localhost. Render fills in this service's
-      # own URL, which is a self-reference and therefore not a cycle.
-      - key: PUBLIC_API_URL
-        fromService:
-          type: web
-          name: campus-wallet
-          property: url
-      - key: PUBLIC_APP_URL
-        fromService:
-          type: web
-          name: campus-wallet
-          property: url
+      # NOTE: there is deliberately no `fromService` anywhere in this file.
+      #
+      # SSLCommerz needs a public address to redirect back to and to post its IPN to, and
+      # config.js takes that from RENDER_EXTERNAL_URL, which Render injects into every web
+      # service automatically. Declaring it here as a `fromService` self-reference would
+      # work at best and be read as a trivial cycle at worst — and a cycle between services
+      # is exactly what made an earlier version of this blueprint unappliable.
+      #
       # CORS_ORIGINS is deliberately unset. The app and the API share one origin, so the
       # browser never makes a cross-origin request and nothing needs allowing.
       #
