@@ -23,17 +23,57 @@ export function createApp() {
   app.use(express.json({ limit: '64kb' }));
   app.disable('x-powered-by');
 
-  // Security headers, hand-rolled to avoid a dependency for six lines. This is a JSON
-  // API — it renders no HTML — so the CSP just forbids everything; nothing legitimate
-  // loads resources from an API response, and a strict one neutralises any reflected
-  // content. HSTS only bites once served over HTTPS, so it is harmless in local http.
-  app.use((_req, res, next) => {
+  /*
+   * Security headers, hand-rolled to avoid a dependency for a handful of lines.
+   *
+   * The CSP has to distinguish two kinds of response, because this origin now serves both.
+   * It used to be a JSON API only, so `default-src 'none'` was exactly right — nothing
+   * legitimate loads resources from an API response, and forbidding everything neutralises
+   * any reflected content.
+   *
+   * Then the same origin started serving the React app, and that header silently became
+   * fatal: the browser downloaded the bundle (HTTP 200) and REFUSED TO EXECUTE IT, so the
+   * page rendered blank with no failed request in the network tab and nothing in the server
+   * log. curl showed 200 throughout, because curl does not enforce CSP. Only a real browser
+   * console named it.
+   *
+   * So: API responses keep the deny-everything policy, and HTML gets a policy that permits
+   * exactly what this app actually uses and nothing more.
+   */
+  const API_CSP = "default-src 'none'; frame-ancestors 'none'";
+  const APP_CSP = [
+    "default-src 'self'",
+    "script-src 'self'",
+    // Vite injects the stylesheet as a <link>, but React sets inline styles on elements,
+    // which 'unsafe-inline' covers for style attributes. No inline <script> is allowed.
+    "style-src 'self' 'unsafe-inline'",
+    // data: is required — QR codes are rendered client-side to data URIs.
+    "img-src 'self' data:",
+    "font-src 'self'",
+    // Same-origin XHR only. The gateway is reached by full-page redirect, not fetch.
+    "connect-src 'self'",
+    // The one destination the app hands the student to, for payment.
+    "form-action 'self' https://sandbox.sslcommerz.com https://securepay.sslcommerz.com",
+    "base-uri 'self'",
+    "frame-ancestors 'none'",
+    "object-src 'none'",
+  ].join('; ');
+
+  app.use((req, res, next) => {
     res.set('X-Content-Type-Options', 'nosniff');
     res.set('X-Frame-Options', 'DENY');
     res.set('Referrer-Policy', 'no-referrer');
-    res.set('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+    // HSTS only bites once served over HTTPS, so it is harmless in local http.
     res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     res.set('Cross-Origin-Resource-Policy', 'same-site');
+
+    /*
+     * Decided by what is being requested, not by what is eventually sent — the header has
+     * to be set before any handler runs. Anything under /api, plus the two operational
+     * endpoints, is API surface; everything else is the app or its assets.
+     */
+    const isApi = req.path.startsWith('/api/') || req.path === '/health' || req.path === '/ready';
+    res.set('Content-Security-Policy', isApi ? API_CSP : APP_CSP);
     next();
   });
 
@@ -80,25 +120,41 @@ export function createApp() {
   });
 
   /*
-   * Every router answers on BOTH the bare path and under /api.
+   * Every router answers on BOTH the bare path and under /api, so the browser can use one
+   * prefix while tests and curl keep the bare paths — and the frontend needs no build-time
+   * base URL.
    *
-   * The browser calls /api/... so that one origin can serve the app and the API together
-   * (see the static-file block below for why that matters). Tests and curl call the bare
-   * paths. Mounting both costs nothing and means the frontend needs no build-time base URL
-   * — one less thing to configure and get wrong.
+   * Mounted as TWO separate calls, /api first, deliberately. The obvious shorthand
+   *
+   *     app.use(['/', '/api'], router)
+   *
+   * is broken: Express tries the array in order and '/' is a prefix of everything, so
+   * /api/mode matched '/', stripped nothing, and handed '/api/mode' to a router that only
+   * knows '/mode'. The '/api' alternative was never reached. It failed silently for every
+   * router mounted at root while APPEARING to work for '/auth' — because '/auth' does not
+   * match '/api/auth', so there the second entry did get used. One passing check on the
+   * single path the bug spares is what let it reach production.
    */
-  const both = (p) => (p === '/' ? ['/', '/api'] : [p, `/api${p}`]);
+  const dual = (path, ...handlers) => {
+    app.use(path === '/' ? '/api' : `/api${path}`, ...handlers);
+    app.use(path, ...handlers);
+  };
 
-  // Credential endpoints are the brute-force surface, so they get the tight bucket.
-  app.use(both('/auth'), rateLimit({ windowMs: 60_000, max: 10, key: 'auth', keyFn: authKey }), authRouter);
-  app.use(both('/'), rateLimit({ windowMs: 60_000, max: 120, key: 'api' }), walletRouter);
-  app.use(both('/'), topupRouter);
-  app.use(both('/'), campusRouter);
+  // Credential endpoints are the brute-force surface, so they get the tight bucket. The
+  // same limiter instance is passed to both mounts, so the two share one set of counters
+  // and the /api prefix cannot be used to double an attacker's budget.
+  const authLimiter = rateLimit({ windowMs: 60_000, max: 10, key: 'auth', keyFn: authKey });
+  const apiLimiter = rateLimit({ windowMs: 60_000, max: 120, key: 'api' });
+
+  dual('/auth', authLimiter, authRouter);
+  dual('/', apiLimiter, walletRouter);
+  dual('/', topupRouter);
+  dual('/', campusRouter);
   // Zero-float orders, reconciliation and audit. Mounted at '/' because it owns both
   // student-facing paths (/orders) and admin ones (/admin/reconciliation/...), and
   // splitting them across two mounts would put the same router in two places.
-  app.use(both('/'), ordersRouter);
-  app.use(both('/admin'), adminRouter);
+  dual('/', ordersRouter);
+  dual('/admin', adminRouter);
 
   /*
    * Serve the built React app from this same process.
