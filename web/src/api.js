@@ -106,6 +106,9 @@ export const api = {
   // student to — the money goes to PUC's merchant account, never to a balance here.
   payOrderOnline: (token) => call(`/orders/${encodeURIComponent(token)}/pay/ssl`, { method: 'POST' }),
   orderPayments: (token) => call(`/orders/${encodeURIComponent(token)}/payments`),
+  // The student's own payment record — what replaces the balance. Scoped server-side
+  // to the caller; it deliberately takes no user id.
+  myPayments: () => call('/me/payments'),
 
   // ---------------------------------------------------------------- reconciliation (admin)
   importSettlement: (payload) => call('/admin/settlements/import', { method: 'POST', body: payload }),

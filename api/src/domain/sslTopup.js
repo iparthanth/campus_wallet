@@ -3,9 +3,11 @@ import { config } from '../config.js';
 import { isValidPaisa } from './money.js';
 import { TopupError } from './topup.js';
 import * as ssl from '../services/sslcommerz.js';
+import { refuseCustody } from './custody.js';
 
 /** Opens an SSLCommerz session and records our side before the student leaves the site. */
 export async function startSslTopup({ userId, amountPaisa }) {
+  refuseCustody(TopupError, 'pay each order at the counter or online instead of pre-loading credit');
   if (!isValidPaisa(amountPaisa)) {
     throw new TopupError(422, 'INVALID_AMOUNT', 'Enter a valid amount');
   }
@@ -72,6 +74,7 @@ async function creditOnce(client, { tranId, valId, method }) {
  * the gateway's number is the only one that counts.
  */
 export async function completeSslTopup({ valId }) {
+  refuseCustody(TopupError, 'pay each order at the counter or online instead of pre-loading credit');
   const result = await ssl.validatePayment(valId);
   if (!result.ok) {
     throw new TopupError(402, 'PAYMENT_NOT_VALID', `Gateway reported ${result.status}`);

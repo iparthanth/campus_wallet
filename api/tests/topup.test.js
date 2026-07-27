@@ -5,6 +5,12 @@ import { startFakeBkash } from './fake-bkash.js';
 let fake, api, makeUser, balanceOf, resetDb, closeDb, query, bkash;
 
 beforeAll(async () => {
+  // The closed-loop DEMO path. Transfers and top-ups move an internally-held balance,
+  // which production refuses to do — holding student money is issuing a prepaid payment
+  // instrument (PSS Act 2024 s.15(1)). This suite opts in explicitly so the legacy path
+  // stays covered while the production default is zero_float. The mode is read at import
+  // time, so modules load after the environment is set.
+  process.env.WALLET_MODE = 'closed_loop';
   fake = await startFakeBkash();
   process.env.BKASH_BASE_URL = fake.baseUrl;
   process.env.BKASH_APP_KEY = 'test-app-key';

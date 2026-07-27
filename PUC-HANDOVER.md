@@ -90,6 +90,15 @@ document that can be forgotten.
   `WALLET_MODE=closed_loop` with `NODE_ENV=production` throws at boot with an error citing
   s.15(1). There is no override flag. A misconfigured environment variable cannot expose
   PUC's officers to criminal liability.
+- **Every operation that would move an internally-held balance refuses**, in the domain
+  layer, not the interface. Student-to-student transfer, and both top-up routes, answer
+  `409 ZERO_FLOAT` and move nothing. This is a separate control from the one above, and the
+  distinction matters: the boot guard stops the wrong *mode*, these stop the wrong
+  *operations*. An earlier build had the first without the second — the deployment declared
+  itself zero-float while a student could still top up and hold a balance. Hiding the button
+  would not have been a fix; the route was reachable regardless of what the browser drew.
+- **There is no balance to see.** A student's home screen is their payment record — what
+  they paid, to which outlet, when, and the reference that proves it — not a stored value.
 - **An outlet that has not been onboarded by an acquiring bank cannot trade.** Raising an
   order against it fails with `NOT_ONBOARDED` and writes *nothing* — no partial record, no
   QR. It is impossible to print a QR that would be declined at the counter.

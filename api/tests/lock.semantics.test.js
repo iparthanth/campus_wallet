@@ -1,8 +1,21 @@
-import { pool, query } from '../src/db/pool.js';
-import { makeUser, resetDb, closeDb } from './helpers.js';
+let pool, query, makeUser, resetDb, closeDb;
 
-beforeEach(resetDb);
-afterAll(closeDb);
+beforeAll(async () => {
+  // The closed-loop DEMO path. Transfers and top-ups move an internally-held balance,
+  // which production refuses to do — holding student money is issuing a prepaid payment
+  // instrument (PSS Act 2024 s.15(1)). This suite opts in explicitly so the legacy path
+  // stays covered while the production default is zero_float. The mode is read at import
+  // time, so modules load after the environment is set.
+  process.env.WALLET_MODE = 'closed_loop';
+  ({ pool, query } = await import('../src/db/pool.js'));
+  ({ makeUser, resetDb, closeDb } = await import('./helpers.js'));
+});
+
+beforeEach(() => resetDb());
+afterAll(async () => {
+  await closeDb();
+  delete process.env.WALLET_MODE;
+});
 
 /**
  * WHY THIS FILE EXISTS

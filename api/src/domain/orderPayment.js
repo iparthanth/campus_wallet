@@ -90,9 +90,9 @@ export async function startOrderPayment({ token, payerUserId }) {
   }
 
   await query(
-    `INSERT INTO order_payments (charge_id, gateway, tran_id, session_key, amount_paisa)
-     VALUES ($1, 'sslcommerz', $2, $3, $4)`,
-    [order.id, tranId, session.sessionKey ?? null, order.amount_paisa]
+    `INSERT INTO order_payments (charge_id, gateway, tran_id, session_key, amount_paisa, payer_user_id)
+     VALUES ($1, 'sslcommerz', $2, $3, $4, $5)`,
+    [order.id, tranId, session.sessionKey ?? null, order.amount_paisa, payerUserId]
   );
 
   return {
@@ -307,6 +307,50 @@ export async function paymentsForOrder(token) {
     [order.id]
   )).rows;
   return { payments: rows };
+}
+
+/**
+ * A student's own payment record — what replaces the balance.
+ *
+ * Removing the balance is the compliance fix; this is the part that stops it being a
+ * downgrade. A balance answered "how much have I got"; that question is no longer this
+ * system's business. The questions that ARE its business, and that a student actually needs
+ * standing at a counter or arguing with the accounts office, are: what have I paid, when,
+ * to which outlet, and what reference proves it.
+ *
+ * `in_flight` is separated deliberately. A payment that is INITIATED has left the student's
+ * hands but not yet been confirmed by the gateway, and on Bangladeshi mobile data that gap
+ * can be minutes. Showing it as "nothing here" invites a second payment for the same order,
+ * which is the double-payment the reconciler then has to refund.
+ */
+export async function myPayments(userId, { limit = 30 } = {}) {
+  const rows = (await query(
+    `SELECT tran_id, gateway, status, amount_paisa, gateway_amount_paisa, method,
+            created_at, paid_at, order_ref, memo, order_token, order_status,
+            merchant_name, merchant_category
+       FROM student_payments
+      WHERE payer_user_id = $1
+      ORDER BY created_at DESC
+      LIMIT $2`,
+    [userId, Math.min(Number(limit) || 30, 100)]
+  )).rows;
+
+  const paid = rows.filter((r) => r.status === 'PAID');
+  const inFlight = rows.filter((r) => r.status === 'INITIATED');
+
+  // Only settled money counts towards the total. Counting an unconfirmed payment would
+  // tell a student they had paid when the gateway may still decline it.
+  const totalPaisa = paid.reduce((sum, r) => sum + Number(r.gateway_amount_paisa ?? r.amount_paisa), 0);
+
+  return {
+    payments: rows,
+    in_flight: inFlight,
+    totals: {
+      paid_count: paid.length,
+      paid_paisa: totalPaisa,
+      in_flight_count: inFlight.length,
+    },
+  };
 }
 
 /** What the gateway is still holding — collected from students, not yet in PUC's bank. */

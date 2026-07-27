@@ -5,6 +5,7 @@ import Send from './Send.jsx';
 import TopUp from './TopUp.jsx';
 import Analytics from './Analytics.jsx';
 import PayCharge from './PayCharge.jsx';
+import Payments from './Payments.jsx';
 import Counter from './Counter.jsx';
 import Reconciliation from './Reconciliation.jsx';
 import PhoneVerify from './PhoneVerify.jsx';
@@ -12,16 +13,24 @@ import ThemeToggle from './components/ThemeToggle.jsx';
 import { useToast } from './components/Toasts.jsx';
 import { Avatar, EmptyState, Message, SkeletonRows } from './components/ui.jsx';
 
+/**
+ * `needs: 'custody'` marks a screen that only makes sense when this deployment holds
+ * student balances — sending money to another student, and topping one up.
+ *
+ * In zero-float (production, and the only lawful mode) those screens are gone, because the
+ * balance behind them does not exist. They are hidden here AND refused by the API, since a
+ * hidden button is presentation and the route is still reachable by curl.
+ */
 const NAV = [
-  { key: 'wallet',  label: 'Wallet',    icon: '◎' },
-  { key: 'send',    label: 'Send',      icon: '↗' },
-  { key: 'history', label: 'History',   icon: '≡' },
+  { key: 'wallet',  label: 'Payments',   icon: '◎' },
   { key: 'pay',     label: 'Pay a bill', icon: '⌗' },
-  { key: 'topup',   label: 'Top up',    icon: '+', needs: 'topup' },
-  { key: 'counter', label: 'Counter',   icon: '▤', needs: 'operator' },
-  { key: 'account', label: 'Account',   icon: '☺' },
-  { key: 'admin',   label: 'Dashboard', icon: '◫', needs: 'admin' },
-  { key: 'recon',   label: 'Reconcile', icon: '⇄', needs: 'admin' },
+  { key: 'send',    label: 'Send',       icon: '↗', needs: 'custody' },
+  { key: 'history', label: 'History',    icon: '≡', needs: 'custody' },
+  { key: 'topup',   label: 'Top up',     icon: '+', needs: 'topup' },
+  { key: 'counter', label: 'Counter',    icon: '▤', needs: 'operator' },
+  { key: 'account', label: 'Account',    icon: '☺' },
+  { key: 'admin',   label: 'Dashboard',  icon: '◫', needs: 'admin' },
+  { key: 'recon',   label: 'Reconcile',  icon: '⇄', needs: 'admin' },
 ];
 
 export default function App() {
@@ -33,6 +42,11 @@ export default function App() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(Boolean(getToken()));
   const [topupOk, setTopupOk] = useState(false);
+  // Whether this deployment holds balances at all. Asked of the server rather than assumed:
+  // production is always zero_float (the API refuses to boot otherwise), but the demo mode
+  // still exists and the UI must match whichever is running. Defaults to false so a failed
+  // lookup hides the balance screens rather than offering money that may not exist.
+  const [holdsBalance, setHoldsBalance] = useState(false);
   const [isOperator, setIsOperator] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -56,6 +70,7 @@ export default function App() {
 
   useEffect(() => { if (user) refresh(); }, [user, refresh]);
   useEffect(() => { api.topupAvailable().then((r) => setTopupOk(r.available)).catch(() => setTopupOk(false)); }, []);
+  useEffect(() => { api.mode().then((m) => setHoldsBalance(Boolean(m.holds_balance))).catch(() => setHoldsBalance(false)); }, []);
 
   // Ask the server, not the token: operating an outlet is a database fact, and the
   // endpoint answers 403 for everyone else.
@@ -95,8 +110,14 @@ export default function App() {
   );
 
   const isAdmin = getRole() === 'admin';
-  const visible = NAV.filter((n) => !n.needs
-    || (n.needs === 'admin' ? isAdmin : n.needs === 'operator' ? isOperator : topupOk));
+  const visible = NAV.filter((n) => {
+    if (!n.needs) return true;
+    if (n.needs === 'admin') return isAdmin;
+    if (n.needs === 'operator') return isOperator;
+    if (n.needs === 'custody') return holdsBalance;
+    // Top-up is a balance operation too, so it needs custody as well as a working gateway.
+    return holdsBalance && topupOk;
+  });
   const shown = view === 'history' ? txs : txs.slice(0, 6);
 
   return (
@@ -158,7 +179,8 @@ export default function App() {
                   {view === 'send' ? 'Send money' : view === 'topup' ? 'Top up'
                     : view === 'pay' ? 'Pay a bill' : view === 'counter' ? 'Counter'
                     : view === 'account' ? 'Account'
-                    : view === 'history' ? 'Transaction history' : 'Wallet'}
+                    : view === 'history' ? 'Transaction history'
+                    : holdsBalance ? 'Wallet' : 'Payments'}
                 </h1>
                 <p className="page-sub">
                   {view === 'send' ? 'Transfer balance to another student.'
@@ -167,11 +189,12 @@ export default function App() {
                     : view === 'counter' ? 'Raise a bill for a student to scan.'
                     : view === 'account' ? 'Verify the mobile number tied to this account.'
                     : view === 'history' ? 'Every transfer in and out of this wallet.'
-                    : 'Your balance and recent activity.'}
+                    : holdsBalance ? 'Your balance and recent activity.'
+                    : 'What you have paid on campus, and the reference that proves it.'}
                 </p>
               </header>
 
-              {view !== 'send' && view !== 'topup' && view !== 'pay' && view !== 'counter' && view !== 'account' && (
+              {holdsBalance && view !== 'send' && view !== 'topup' && view !== 'pay' && view !== 'counter' && view !== 'account' && (
                 <div className="card">
                   <div className="hero-row">
                     <div>
@@ -224,7 +247,16 @@ export default function App() {
                 <TopUp onCancel={() => setView('wallet')} />
               )}
 
-              {(view === 'wallet' || view === 'history') && (
+              {/*
+                Zero-float: the home screen IS the payment record. Peer-to-peer transfers do
+                not exist here, so a "recent activity" list of them would be permanently
+                empty and would imply a feature the deployment does not offer.
+              */}
+              {view === 'wallet' && !holdsBalance && (
+                <Payments onPay={() => setView('pay')} />
+              )}
+
+              {((view === 'wallet' && holdsBalance) || view === 'history') && (
                 <div className="card">
                   <div className="card-head">
                     <h2 className="card-title">{view === 'wallet' ? 'Recent activity' : 'All transactions'}</h2>

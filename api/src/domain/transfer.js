@@ -2,6 +2,7 @@ import { withTransaction } from '../db/pool.js';
 import { config } from '../config.js';
 import { evaluateRules } from './fraud.js';
 import { isValidPaisa } from './money.js';
+import { refuseCustody } from './custody.js';
 
 /** Domain error with an HTTP status — routes translate these straight to responses. */
 export class TransferError extends Error {
@@ -27,6 +28,10 @@ export class TransferError extends Error {
  *                   never debits twice (retries and double-clicks are safe).
  */
 export async function transfer({ fromUserId, toEmail, amountPaisa, idempotencyKey }) {
+  // Student-to-student transfer moves an internally-held balance, which is exactly the
+  // stored value a university may not issue. Refused at the domain layer, so the route is
+  // closed to curl as well as to the UI.
+  refuseCustody(TransferError, 'students pay outlets directly over licensed rails');
   if (!isValidPaisa(amountPaisa)) {
     throw new TransferError(422, 'INVALID_AMOUNT', 'amount_paisa must be a positive whole number of paisa within the cap');
   }

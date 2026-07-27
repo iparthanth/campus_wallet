@@ -1,6 +1,7 @@
 import { withTransaction } from '../db/pool.js';
 import { isValidPaisa } from './money.js';
 import * as bkash from '../services/bkash.js';
+import { refuseCustody } from './custody.js';
 
 export class TopupError extends Error {
   constructor(status, code, message) {
@@ -12,6 +13,7 @@ export class TopupError extends Error {
 
 /** Step 1 — ask bKash to create a payment and record our side of it. */
 export async function startTopup({ userId, amountPaisa }) {
+  refuseCustody(TopupError, 'pay each order at the counter or online instead of pre-loading credit');
   if (!isValidPaisa(amountPaisa)) {
     throw new TopupError(422, 'INVALID_AMOUNT', 'amount_paisa must be a positive whole number of paisa within the cap');
   }
@@ -81,6 +83,7 @@ function mapBkashError(err) {
 
 /** Step 2 — the user returned from bKash; execute and credit. */
 export async function completeTopup({ paymentID }) {
+  refuseCustody(TopupError, 'pay each order at the counter or online instead of pre-loading credit');
   let result;
   try {
     result = await bkash.executePayment(paymentID);
@@ -108,6 +111,7 @@ export async function completeTopup({ paymentID }) {
  * Asks bKash for the truth and credits if the payment really did complete.
  */
 export async function reconcileTopup({ paymentID }) {
+  refuseCustody(TopupError, 'pay each order at the counter or online instead of pre-loading credit');
   let status;
   try {
     status = await bkash.queryPayment(paymentID);

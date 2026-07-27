@@ -5,7 +5,7 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { raiseOrder, getOrder, outletSummary, OrderError } from '../domain/order.js';
 import {
   startOrderPayment, confirmOrderPayment, closeOrderPayment,
-  paymentsForOrder, clearingOutstanding,
+  paymentsForOrder, clearingOutstanding, myPayments,
 } from '../domain/orderPayment.js';
 import { importSettlement, exceptionReport, crossCheck, ReconciliationError } from '../domain/reconciliation.js';
 import { runAudit, recordAudit, auditHistory } from '../domain/audit.js';
@@ -85,6 +85,18 @@ ordersRouter.post('/orders/:token/pay/ssl', requireAuth, async (req, res, next) 
       token: req.params.token,
       payerUserId: req.user.id,
     }));
+  } catch (err) { return handle(err, res, next); }
+});
+
+/**
+ * The student's own payments — what replaces the balance on their home screen.
+ *
+ * Scoped to req.user.id and never accepts a user id from the caller: a student's payment
+ * history is exactly the kind of endpoint that leaks everyone's if it trusts a parameter.
+ */
+ordersRouter.get('/me/payments', requireAuth, async (req, res, next) => {
+  try {
+    return res.json(await myPayments(req.user.id, { limit: req.query.limit }));
   } catch (err) { return handle(err, res, next); }
 });
 
