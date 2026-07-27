@@ -4,11 +4,13 @@
   "private": true,
   "description": "Campus payments for Premier University Chattogram — Bangla QR orders, double-entry ledger, reconciliation",
   "license": "MIT",
+  "//engines": "Pinned to a major, not '>=22'. An open range let Render pick Node 26.5.0 — newer than anything this was developed or tested on. 24.x matches local development, so production runs what the test suite ran.",
   "engines": {
-    "node": ">=22"
+    "node": "24.x"
   },
+  "//build": "--include=dev on web is load-bearing. render.yaml sets NODE_ENV=production, and npm reads that as 'skip devDependencies' — so it installed react/react-dom/qrcode (34 packages) and skipped vite, the tool needed to build them, failing with 'vite: not found'. The same variable that makes the RUNTIME production-correct makes the BUILD impossible, so each install states its own intent rather than inheriting it. api gets --omit=dev deliberately: jest and supertest have no business in a running server.",
   "scripts": {
-    "build": "cd web && npm ci && npm run build && cd ../api && npm ci",
+    "build": "cd web && npm ci --include=dev && npm run build && cd ../api && npm ci --omit=dev",
     "start": "cd api && npm run migrate && npm run seed -- --if-empty && npm start",
     "test": "cd api && npm test"
   }
