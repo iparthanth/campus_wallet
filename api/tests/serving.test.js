@@ -112,6 +112,32 @@ describe('Content-Security-Policy', () => {
   });
 });
 
+describe('the test suite cannot send a real SMS', () => {
+  /**
+   * setup-env.js loads .env, so a real SMS_API_KEY configured for development would
+   * otherwise be picked up here — swapping the console provider for the live one and
+   * texting the fixture numbers in phone.test.js. Those are plausible Bangladeshi numbers
+   * belonging to real people, and every run would spend real credit.
+   *
+   * Asserted rather than assumed: the guard is one deleted line away from silently
+   * un-guarding, and nothing else in the suite would notice.
+   */
+  test('the SMS key is stripped before any module reads it', async () => {
+    expect(process.env.SMS_API_KEY).toBeUndefined();
+    expect(process.env.SMS_PROVIDER).toBe('console');
+  });
+
+  test('the resolved provider is the console one, whatever .env says', async () => {
+    const { smsProvider } = await import('../src/services/sms.js');
+    expect(smsProvider.name).toBe('console');
+  });
+
+  test('config reports SMS as disabled', async () => {
+    const { config } = await import('../src/config.js');
+    expect(config.sms.enabled).toBe(false);
+  });
+});
+
 describe('the other security headers survive on every response', () => {
   test('are present on API and app alike', async () => {
     for (const path of ['/', '/api/mode']) {

@@ -55,6 +55,20 @@ services:
           property: connectionString
       - key: BCRYPT_ROUNDS
         value: "12"
+      # SMS gateway for phone verification (Alpha SMS — sms.net.bd).
+      #
+      # `sync: false` means Render PROMPTS for the value in the dashboard and stores it
+      # there, rather than reading it from this file. That is the whole point: render.yaml
+      # is committed, so a key written here would be in the repository and in every clone
+      # of it forever. Leave it unset and the console provider runs instead — verification
+      # still works, it just logs the code rather than delivering it.
+      - key: SMS_API_KEY
+        sync: false
+      - key: SMS_PROVIDER
+        value: alpha
+      # SMS_SENDER_ID is deliberately unset. A branded sender ID ("masking") requires a
+      # trade licence; without one the message still delivers, shown from an operator long
+      # code. Setting an unapproved sender id gets messages rejected outright.
       # NOTE: there is deliberately no `fromService` anywhere in this file.
       #
       # SSLCommerz needs a public address to redirect back to and to post its IPN to, and

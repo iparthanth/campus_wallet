@@ -23,3 +23,17 @@ if (process.env.TEST_DATABASE_URL) {
 
 // Tests are slow enough with bcrypt at 12; 4 is plenty to prove the hashing path works.
 process.env.BCRYPT_ROUNDS = process.env.BCRYPT_ROUNDS ?? '4';
+
+/**
+ * Never send a real SMS from a test. Not once, not by accident.
+ *
+ * The line above loads .env, so the moment a real SMS_API_KEY is configured for development
+ * the suite would pick it up, swap the console provider for the live one, and text the
+ * fixture numbers in phone.test.js. Those are plausible Bangladeshi numbers — 8801712345678
+ * and friends — which means they belong to real people who would receive verification codes
+ * for an account they have never heard of, and each run would spend real credit.
+ *
+ * Forced rather than defaulted: a test must not be able to opt back in.
+ */
+delete process.env.SMS_API_KEY;
+process.env.SMS_PROVIDER = 'console';
