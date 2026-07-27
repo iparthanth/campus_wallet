@@ -77,29 +77,44 @@ enforces that rather than letting it fail at the counter.
 
 ## The fast path — one repo connection (recommended)
 
-`render.yaml` is a **complete Render Blueprint**: it provisions the PostgreSQL database,
-the API, and the static frontend together, and wires them to each other automatically.
+`render.yaml` is a **complete Render Blueprint**: it provisions the PostgreSQL database and
+one web service that serves both the React app and the API, and wires them together.
 
-1. Sign up at [render.com](https://render.com) (free, no card) and connect your GitHub.
-2. **New → Blueprint** → pick `iparthanth/campus_wallet`. Render reads `render.yaml` and
-   shows the three services it will create. Click **Apply**.
-3. Wait ~5 minutes. Render creates the database, runs migrations + seed, and publishes the
-   frontend. The URLs appear on the dashboard.
+1. Sign up at [render.com](https://render.com) (free, no card).
+2. **Connect GitHub** and authorise Render for this repository. If the repo is **private**,
+   this step is mandatory — the "Public Git Repository" box cannot see a private repo and
+   reports *"Invalid repository URL"*, which looks like a typo but is a permissions problem.
+3. **New → Blueprint** → pick `iparthanth/campus_wallet`. Give the blueprint a **name**
+   (the field is required and its error is easy to miss above the fold). Render reads
+   `render.yaml` and shows what it will create: a PostgreSQL database and one web service.
+   Click **Apply**.
+4. Wait ~5 minutes. Render creates the database, runs migrations, seeds once, builds the
+   frontend and starts the server. One URL appears on the dashboard — that is the whole app.
 
-That's it — no connection strings to copy, no secrets to paste. The database URL, the JWT
-secret, and the frontend/API URLs are all wired by the blueprint (`fromDatabase`,
-`fromService`, `generateValue`).
+That's it — no connection strings to copy, no secrets to paste. The database URL and the JWT
+secret are wired by the blueprint (`fromDatabase`, `generateValue`).
 
 > **This is what makes it changeable later.** The services are connected to your GitHub
 > repo, so **every `git push` to `main` redeploys automatically** — the API, the frontend,
 > and any new migrations. You change the code, push, and the live site updates itself. No
 > manual redeploy, no re-uploading anything.
 
-**Nothing to edit afterwards.** The frontend gets the API's real URL from `VITE_API_BASE`,
-which Render fills in from the API service at build time, and the API gets `CORS_ORIGINS`
-from the frontend's URL the same way. Neither hostname is written down anywhere, so neither
-can be wrong — which matters because Render appends a random suffix to free-tier service
-names (`campus-wallet-api-XXXX.onrender.com`).
+**Nothing to edit afterwards, and one URL to remember.** The blueprint creates a single
+service that serves both the React app and the API from the same origin.
+
+> **Why one service and not two.** The obvious split — an API service plus a static site —
+> needs each to know the other's address: the frontend needs the API's URL to call it, and
+> the API needs the frontend's origin to allow CORS. Wired with `fromService` in both
+> directions that is a **circular dependency**: neither can be provisioned first, and Render
+> refuses the blueprint with *"A Blueprint file was found, but there was an issue."*
+>
+> Two services + cross-origin + zero manual configuration cannot all be true at once. Same
+> origin removes the requirement rather than working around it: no CORS, no hostname to
+> paste, no random free-tier suffix to chase, and one instance to wake instead of two.
+
+Express serves `web/dist` in production only, so development keeps Vite's hot reload. Every
+API router answers on both `/auth/...` and `/api/auth/...`, so the browser can use one prefix
+without the frontend needing a build-time base URL.
 
 > Free tier notes: the API sleeps after ~15 min idle and takes ~30s to wake (open it once
 > before a demo); the free Postgres expires after 90 days (recreate it then). Both are the

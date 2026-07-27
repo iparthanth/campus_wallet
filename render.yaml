@@ -1,8 +1,19 @@
 # Render Blueprint — the whole app from one repo connection.
 #
-# On Render: New → Blueprint → connect this GitHub repo. Render reads this file and
-# provisions the database, the API, and the static frontend together. Every push to the
-# connected branch then redeploys automatically — that is the "change it later" guarantee.
+# On Render: New → Blueprint → connect this GitHub repo → Apply. Render provisions the
+# database and the service, and redeploys on every push to the connected branch.
+#
+# ONE service, not two. The obvious split — an API service and a static frontend service —
+# needs each to know the other's URL: the frontend needs the API's address to call it, and
+# the API needs the frontend's origin to allow CORS. Wired with `fromService` in both
+# directions that is a CIRCULAR dependency: neither can be provisioned first, and Render
+# rejects the blueprint with "A Blueprint file was found, but there was an issue."
+#
+# Two services + cross-origin + zero manual configuration is not achievable — you can have
+# any two of the three. Serving the built React app from the API removes the requirement
+# instead of working around it: same origin, so no CORS at all, no hostname to paste, and
+# one free instance to wake from sleep instead of two.
+
 databases:
   - name: campus-wallet-db
     plan: free            # free Postgres; expires after 90 days, recreate then
@@ -10,13 +21,13 @@ databases:
     user: wallet
 
 services:
-  # ---- API (Express) ----
   - type: web
-    name: campus-wallet-api
+    name: campus-wallet
     runtime: node
     plan: free
-    rootDir: api
-    buildCommand: npm ci
+    # Build the frontend first, then the API. `npm ci --omit=dev` is deliberately NOT used
+    # for web: Vite and the React plugin are devDependencies and are needed to build.
+    buildCommand: cd web && npm ci && npm run build && cd ../api && npm ci
     # Migrations are forward-only and recorded, so re-running on every boot is a no-op —
     # safe rather than a deploy-time gamble.
     #
@@ -26,7 +37,7 @@ services:
     # they came back. With the guard it seeds once, on first boot, and never again.
     #
     # For a real PUC pilot, drop the seed entirely — see DEPLOY.md §A.3.
-    startCommand: npm run migrate && npm run seed -- --if-empty && npm start
+    startCommand: cd api && npm run migrate && npm run seed -- --if-empty && npm start
     healthCheckPath: /ready
     envVars:
       - key: NODE_ENV
@@ -37,60 +48,26 @@ services:
         fromDatabase:                # wired straight from the database above — no copy-paste
           name: campus-wallet-db
           property: connectionString
-      - key: CORS_ORIGINS
-        fromService:                 # the frontend's own URL, filled in automatically
+      - key: BCRYPT_ROUNDS
+        value: "12"
+      # PUBLIC_API_URL is what SSLCommerz redirects back to and posts its IPN to, so it must
+      # be the address the GATEWAY can reach — not localhost. Render fills in this service's
+      # own URL, which is a self-reference and therefore not a cycle.
+      - key: PUBLIC_API_URL
+        fromService:
           type: web
-          name: campus-wallet-web
+          name: campus-wallet
           property: url
       - key: PUBLIC_APP_URL
         fromService:
           type: web
-          name: campus-wallet-web
+          name: campus-wallet
           property: url
-      - key: PUBLIC_API_URL
-        fromService:
-          type: web
-          name: campus-wallet-api
-          property: url
-      - key: BCRYPT_ROUNDS
-        value: "12"
-      # WALLET_MODE is deliberately NOT set. It defaults to zero_float, the only lawful
-      # mode: the university never holds student balances (Payment and Settlement Systems
-      # Act 2024 s.15(1)). Setting it to closed_loop here would make the API refuse to
-      # start, because NODE_ENV is production above — that refusal is the point, not a bug
-      # to work around. See README "The zero-float rule" and PUC-HANDOVER.md §2.
-
-  # ---- Frontend (static React) ----
-  - type: web
-    name: campus-wallet-web
-    runtime: static
-    rootDir: web
-    buildCommand: npm ci && npm run build
-    staticPublishPath: dist
-    envVars:
-      # The API's real URL, filled in by Render at build time.
+      # CORS_ORIGINS is deliberately unset. The app and the API share one origin, so the
+      # browser never makes a cross-origin request and nothing needs allowing.
       #
-      # This replaced a rewrite whose destination was a hardcoded hostname. Render appends
-      # a random suffix to free-tier service names, so that hostname was wrong on every
-      # fresh deploy and the site came up looking fine while every request 404'd — a
-      # manual post-deploy edit that is easy to forget and hard to diagnose.
-      #
-      # Going cross-origin is safe here because the API's CORS_ORIGINS is wired from this
-      # service's URL by the same mechanism, so the two cannot disagree.
-      - key: VITE_API_BASE
-        fromService:
-          type: web
-          name: campus-wallet-api
-          property: url
-    # SPA fallback: every non-asset path serves index.html so client-side routes work.
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
-    headers:
-      - path: /*
-        name: X-Content-Type-Options
-        value: nosniff
-      - path: /*
-        name: X-Frame-Options
-        value: DENY
+      # WALLET_MODE is deliberately unset. It defaults to zero_float, the only lawful mode:
+      # the university never holds student balances (Payment and Settlement Systems Act
+      # 2024 s.15(1)). Setting it to closed_loop here would make the API refuse to start,
+      # because NODE_ENV is production above — that refusal is the point, not a bug to work
+      # around. See README "The zero-float rule" and PUC-HANDOVER.md §2.

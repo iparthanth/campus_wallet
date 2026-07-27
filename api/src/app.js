@@ -1,4 +1,7 @@
 import express from 'express';
+import { existsSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { authRouter } from './routes/auth.js';
 import { walletRouter } from './routes/wallet.js';
 import { adminRouter } from './routes/admin.js';
@@ -76,16 +79,69 @@ export function createApp() {
     }
   });
 
+  /*
+   * Every router answers on BOTH the bare path and under /api.
+   *
+   * The browser calls /api/... so that one origin can serve the app and the API together
+   * (see the static-file block below for why that matters). Tests and curl call the bare
+   * paths. Mounting both costs nothing and means the frontend needs no build-time base URL
+   * — one less thing to configure and get wrong.
+   */
+  const both = (p) => (p === '/' ? ['/', '/api'] : [p, `/api${p}`]);
+
   // Credential endpoints are the brute-force surface, so they get the tight bucket.
-  app.use('/auth', rateLimit({ windowMs: 60_000, max: 10, key: 'auth', keyFn: authKey }), authRouter);
-  app.use('/', rateLimit({ windowMs: 60_000, max: 120, key: 'api' }), walletRouter);
-  app.use('/', topupRouter);
-  app.use('/', campusRouter);
+  app.use(both('/auth'), rateLimit({ windowMs: 60_000, max: 10, key: 'auth', keyFn: authKey }), authRouter);
+  app.use(both('/'), rateLimit({ windowMs: 60_000, max: 120, key: 'api' }), walletRouter);
+  app.use(both('/'), topupRouter);
+  app.use(both('/'), campusRouter);
   // Zero-float orders, reconciliation and audit. Mounted at '/' because it owns both
   // student-facing paths (/orders) and admin ones (/admin/reconciliation/...), and
   // splitting them across two mounts would put the same router in two places.
-  app.use('/', ordersRouter);
-  app.use('/admin', adminRouter);
+  app.use(both('/'), ordersRouter);
+  app.use(both('/admin'), adminRouter);
+
+  /*
+   * Serve the built React app from this same process.
+   *
+   * Why one service instead of two: the frontend needs the API's URL and the API needs the
+   * frontend's origin for CORS. As two Render services wired with `fromService`, that is a
+   * CIRCULAR dependency — neither can be provisioned first, and Render rejects the
+   * blueprint outright. Two services + cross-origin + zero manual configuration is not
+   * achievable; you can have any two of the three.
+   *
+   * Serving both from one origin removes the requirement rather than working around it:
+   * no CORS preflight, no cross-service wiring, no hostname to get wrong, and one free
+   * instance to wake instead of two.
+   *
+   * Only in production. Development keeps Vite's dev server for hot reload, and the tests
+   * never build the frontend — so a missing dist must not break either.
+   */
+  const distDir = resolve(dirname(fileURLToPath(import.meta.url)), '../../web/dist');
+  if (config.env === 'production' && existsSync(distDir)) {
+    // Hashed asset filenames are content-addressed, so they can be cached hard. index.html
+    // must NOT be, or a returning student keeps loading a stale bundle after every deploy.
+    app.use(express.static(distDir, {
+      maxAge: '1y',
+      index: false,
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('index.html')) res.setHeader('Cache-Control', 'no-cache');
+      },
+    }));
+
+    /*
+     * SPA fallback: any GET that is not an API route and not a real file serves index.html,
+     * so a deep link like /reconcile works on a hard refresh.
+     *
+     * Placed AFTER every API router, so it can only ever catch what they did not. An
+     * unmatched API path still needs to answer JSON 404 rather than HTML — a client that
+     * asked for JSON and got a page cannot report the error usefully.
+     */
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api/')) return next();
+      if (req.accepts('html')) return res.sendFile(join(distDir, 'index.html'));
+      return next();
+    });
+  }
 
   app.use((_req, res) => res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Route not found' } }));
 
