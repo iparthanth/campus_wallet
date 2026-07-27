@@ -1,0 +1,15 @@
+{
+  "name": "campus-wallet",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Campus payments for Premier University Chattogram — Bangla QR orders, double-entry ledger, reconciliation",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "cd web && npm ci && npm run build && cd ../api && npm ci",
+    "start": "cd api && npm run migrate && npm run seed -- --if-empty && npm start",
+    "test": "cd api && npm test"
+  }
+}

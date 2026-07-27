@@ -25,9 +25,14 @@ services:
     name: campus-wallet
     runtime: node
     plan: free
-    # Build the frontend first, then the API. `npm ci --omit=dev` is deliberately NOT used
-    # for web: Vite and the React plugin are devDependencies and are needed to build.
-    buildCommand: cd web && npm ci && npm run build && cd ../api && npm ci
+    # Delegates to the ROOT package.json, which exists for two reasons beyond tidiness:
+    # Render's Node runtime uses a package.json at the repo root to detect the project and
+    # to pick a Node version from `engines`. This repo previously had one only inside api/
+    # and web/, so at the root there was nothing to detect.
+    #
+    # The build installs web's devDependencies deliberately — Vite and the React plugin
+    # live there and are required to produce dist/.
+    buildCommand: npm run build
     # Migrations are forward-only and recorded, so re-running on every boot is a no-op —
     # safe rather than a deploy-time gamble.
     #
@@ -37,7 +42,7 @@ services:
     # they came back. With the guard it seeds once, on first boot, and never again.
     #
     # For a real PUC pilot, drop the seed entirely — see DEPLOY.md §A.3.
-    startCommand: cd api && npm run migrate && npm run seed -- --if-empty && npm start
+    startCommand: npm start
     healthCheckPath: /ready
     envVars:
       - key: NODE_ENV
