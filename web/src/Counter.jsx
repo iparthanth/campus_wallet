@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { api, formatPaisa, takaToPaisa } from './api.js';
 import { Field, Message, StatTile, EmptyState } from './components/ui.jsx';
+import { ReferenceChip, MethodMarks } from './components/payment.jsx';
 
 /**
  * The counter view — what canteen or photocopy staff use.
@@ -133,21 +134,27 @@ export default function Counter() {
             <div className="hero-figure">{formatPaisa(order.amount_paisa)}</div>
             {order.memo && <p className="card-note">{order.memo}</p>}
 
-            {qr && <img src={qr} alt={`Bangla QR for a ${formatPaisa(order.amount_paisa)} order`}
-                        style={{ margin: '16px auto', display: 'block', borderRadius: 8 }} />}
+            {/* Framed: a bare QR on a white card reads as decoration, not the instrument. */}
+            {qr && (
+              <div className="qr-frame" style={{ margin: '16px auto' }}>
+                <img src={qr} alt={`Bangla QR for a ${formatPaisa(order.amount_paisa)} order`}
+                     style={{ display: 'block' }} />
+              </div>
+            )}
 
-            <p className="card-note">
-              Scan with <strong>bKash, Nagad, Rocket, upay</strong> or any bank app
-            </p>
+            <p className="card-note">Scan with any bank or MFS app</p>
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 'var(--s2)' }}>
+              <MethodMarks />
+            </div>
 
             {/*
               The reference is shown because it is what makes a payment traceable if
               anything goes wrong. Crockford base32 — no I, L, O or U — so a reference read
               aloud across a noisy counter cannot be heard as a different valid one.
             */}
-            <p className="field-hint">
-              Reference: <strong data-testid="order-ref">{order.order_ref}</strong>
-            </p>
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <ReferenceChip reference={order.order_ref} hint={false} />
+            </div>
 
             <button className="btn btn-ghost" style={{ marginTop: 16, width: 'auto' }}
                     onClick={clear}>Cancel this order</button>

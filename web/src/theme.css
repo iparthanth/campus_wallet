@@ -17,10 +17,29 @@
   --hairline:     rgba(11, 11, 11, 0.10);
   --hairline-2:   rgba(11, 11, 11, 0.06);
 
-  --accent:       #2a78d6;
-  --accent-press: #256abf;
-  --accent-wash:  #eaf2fd;
+  /* Deep teal, not the stock framework blue. Chosen to sit apart from the two marks
+     students already associate with money here — bKash magenta and Nagad orange — so a
+     Campus Wallet button is never mistaken for a provider's. Dark enough to clear 4.5:1
+     against --surface with white text. */
+  --accent:       #0c5f5b;
+  --accent-press: #094a47;
+  --accent-wash:  #e4f1f0;
+  --accent-ink:   #06403d;
   --on-accent:    #ffffff;
+  /* Warm counterweight, used sparingly: the reference chip and the QR frame. Two hues is
+     an identity; one is a default, and five is a toy. */
+  --brand-2:      #b4763a;
+  --brand-2-wash: #fbf1e6;
+
+  /* Payment status. Three words, used verbatim everywhere a status appears — see
+     Payments.jsx. Deliberately NOT the good/warning/critical trio: "awaiting the bank"
+     is not a warning, and "not received" is not the student's error. */
+  --state-wait:      #6b6a66;   /* Awaiting confirmation — neutral, nobody is at fault */
+  --state-wait-wash: #f1f1ee;
+  --state-ok:        #0a5c0a;   /* Confirmed — a ledger posting exists */
+  --state-ok-wash:   #e9f6e9;
+  --state-none:      #8a5a06;   /* Not received — amber, never red */
+  --state-none-wash: #fdf3dd;
 
   /* A debit is not an error, so it stays ink. Only credits get colour. */
   --credit:       #006300;
@@ -43,7 +62,7 @@
   --grid:         #e1e0d9;
   --axis:         #c3c2b7;
   --series-ctx:   #c9c8c2;   /* daily volume — context */
-  --series-line:  #2a78d6;   /* 7-day average — the point */
+  --series-line:  #0c5f5b;   /* 7-day average — the point */
 
   --shadow:    0 1px 2px rgba(11,11,11,.04), 0 4px 16px rgba(11,11,11,.04);
   --shadow-lg: 0 4px 12px rgba(11,11,11,.08), 0 12px 32px rgba(11,11,11,.10);
@@ -52,7 +71,10 @@
   --t-h3: 20px; --t-h2: 24px; --t-h1: 30px; --t-hero: 44px;
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px;
   --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px;
-  --radius: 10px; --radius-sm: 7px;
+  --radius: 10px; --radius-sm: 7px; --radius-lg: 16px;
+  /* Money is data, not prose: tabular figures so columns of taka align on the decimal
+     and a changing amount does not make the row jitter. */
+  --font-num: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
   --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --ease: cubic-bezier(.2, .7, .3, 1);
 }
@@ -65,13 +87,21 @@
     --plane: #0d0d0d; --surface: #1a1a19; --surface-sunk: #232322; --surface-hi: #262625;
     --ink: #ffffff; --ink-2: #c3c2b7; --ink-muted: #898781;
     --hairline: rgba(255,255,255,0.12); --hairline-2: rgba(255,255,255,0.07);
-    --accent: #3987e5; --accent-press: #5598e7; --accent-wash: #12243a; --on-accent: #04121f;
+    /* Re-chosen for the dark surface, not lightened from the light value: the light teal
+       is too dark to read on #1a1a19, and simply raising its lightness desaturates it to
+       grey. */
+    --accent: #4fbfb3; --accent-press: #6fd0c5; --accent-wash: #0e2a28; --accent-ink: #9fe3db;
+    --on-accent: #06201e;
+    --brand-2: #d99b58; --brand-2-wash: #2a1f12;
+    --state-wait: #a9a8a3; --state-wait-wash: #232322;
+    --state-ok: #7fe07f; --state-ok-wash: #10240f;
+    --state-none: #f5cf76; --state-none-wash: #2b2308;
     --credit: #0ca30c; --debit: #ffffff;
     --good-wash: #10240f; --good-ink: #7fe07f;
     --warning-wash: #2b2308; --warning-ink: #f5cf76;
     --critical-wash: #2c1212; --critical-ink: #f19a9a;
     --grid: #2c2c2a; --axis: #383835;
-    --series-ctx: #4a4a46; --series-line: #3987e5;
+    --series-ctx: #4a4a46; --series-line: #4fbfb3;
     --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.3);
     --shadow-lg: 0 4px 12px rgba(0,0,0,.5), 0 12px 32px rgba(0,0,0,.45);
   }
@@ -81,13 +111,18 @@
   --plane: #0d0d0d; --surface: #1a1a19; --surface-sunk: #232322; --surface-hi: #262625;
   --ink: #ffffff; --ink-2: #c3c2b7; --ink-muted: #898781;
   --hairline: rgba(255,255,255,0.12); --hairline-2: rgba(255,255,255,0.07);
-  --accent: #3987e5; --accent-press: #5598e7; --accent-wash: #12243a; --on-accent: #04121f;
+  --accent: #4fbfb3; --accent-press: #6fd0c5; --accent-wash: #0e2a28; --accent-ink: #9fe3db;
+  --on-accent: #06201e;
+  --brand-2: #d99b58; --brand-2-wash: #2a1f12;
+  --state-wait: #a9a8a3; --state-wait-wash: #232322;
+  --state-ok: #7fe07f; --state-ok-wash: #10240f;
+  --state-none: #f5cf76; --state-none-wash: #2b2308;
   --credit: #0ca30c; --debit: #ffffff;
   --good-wash: #10240f; --good-ink: #7fe07f;
   --warning-wash: #2b2308; --warning-ink: #f5cf76;
   --critical-wash: #2c1212; --critical-ink: #f19a9a;
   --grid: #2c2c2a; --axis: #383835;
-  --series-ctx: #4a4a46; --series-line: #3987e5;
+  --series-ctx: #4a4a46; --series-line: #4fbfb3;
   --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.3);
   --shadow-lg: 0 4px 12px rgba(0,0,0,.5), 0 12px 32px rgba(0,0,0,.45);
 }
@@ -342,4 +377,82 @@ body {
   .hero-figure { font-size: 34px; }
   .card { padding: var(--s4); }
   .toasts { bottom: calc(64px + env(safe-area-inset-bottom, 0px)); left: var(--s4); right: var(--s4); max-width: none; }
+}
+
+/* ==========================================================================
+   Payment status, references and money
+   Added from the trust/confirmation research. Three status words are used
+   verbatim across row, tile and receipt — a student who learns what
+   "Awaiting confirmation" means on one screen must not meet "Processing"
+   on the next and have to work out whether it is the same thing.
+   ========================================================================== */
+
+.state {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: var(--t-caption); font-weight: 600; letter-spacing: .01em;
+  padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+}
+.state::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+/* Neutral, not amber: waiting on a bank's overnight file is nobody's fault. */
+.state-wait { color: var(--state-wait); background: var(--state-wait-wash); }
+.state-ok   { color: var(--state-ok);   background: var(--state-ok-wash); }
+/* Amber, never red — "we did not receive it" is not the student's error. */
+.state-none { color: var(--state-none); background: var(--state-none-wash); }
+
+/*
+ * The order reference, built to be COPIED rather than admired.
+ * 44px minimum height is the tap target; an icon-only copy button fails on a
+ * phone held one-handed at a counter.
+ */
+.ref-chip {
+  display: inline-flex; align-items: center; gap: var(--s2);
+  min-height: 44px; padding: 0 var(--s3);
+  font-family: var(--font-num); font-size: 16px; font-weight: 600; letter-spacing: .05em;
+  color: var(--accent-ink, var(--accent));
+  background: var(--brand-2-wash); border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm); cursor: pointer;
+  transition: background .14s var(--ease);
+}
+.ref-chip:hover { background: var(--accent-wash); }
+.ref-chip .ref-hint { font-family: var(--font); font-size: var(--t-caption); font-weight: 500; color: var(--ink-muted); letter-spacing: 0; }
+.ref-inline { font-family: var(--font-num); font-size: var(--t-sm); letter-spacing: .04em; color: var(--ink-2); }
+
+/*
+ * Money. Tabular figures everywhere so a column of taka aligns on the decimal and a
+ * value that changes does not shift the row under a reading finger.
+ */
+.money { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+.hero-figure { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+.stat-value  { font-variant-numeric: tabular-nums; }
+
+/* The brand mark earns its two hues: a flat square reads as a placeholder. */
+.brand-mark {
+  background: linear-gradient(140deg, var(--accent) 0%, var(--accent-press) 100%);
+  box-shadow: 0 1px 2px rgba(0,0,0,.18);
+  letter-spacing: -.02em;
+}
+
+/*
+ * Payment-method marks. Students recognise the bKash and Nagad shapes far faster than
+ * the words, and seeing them is what makes a pay button feel like it leads somewhere real.
+ * Rendered as text on brand-coloured chips rather than logo files: the real marks are
+ * trademarks we have no licence to embed, and the CSP forbids loading them from a CDN.
+ */
+.methods { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.method {
+  font-size: 11px; font-weight: 700; letter-spacing: .01em;
+  padding: 3px 7px; border-radius: 5px; color: #fff; white-space: nowrap;
+}
+.method-bkash { background: #e2136e; }
+.method-nagad { background: #ec1c24; }
+.method-rocket{ background: #8c3494; }
+.method-upay  { background: #0a7d3e; }
+.method-card  { background: var(--ink-2); }
+.method-more  { background: none; color: var(--ink-muted); font-weight: 600; padding-left: 2px; }
+
+/* A QR is a payment instrument; framing it says "this is the thing to scan". */
+.qr-frame {
+  display: inline-block; padding: var(--s3); background: #fff;
+  border: 2px solid var(--brand-2); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, formatPaisa } from './api.js';
 import { Field, Message } from './components/ui.jsx';
+import { ReferenceChip, MethodMarks } from './components/payment.jsx';
 
 /**
  * The student side of a counter payment.
@@ -106,8 +107,17 @@ export default function PayCharge({ balancePaisa, onPaid, onCancel }) {
                     data-testid="btn-pay-online" style={{ marginTop: 'var(--s4)' }}>
               {busy ? 'Opening gateway…' : `Pay ৳${(order.amount_paisa / 100).toFixed(2)} online`}
             </button>
+            {/*
+              The marks, not the words. A student recognises the bKash shape faster than
+              the phrase "mobile banking" — and the gateway opens on its CARDS tab, so
+              showing these here is what stops someone landing on a card form and
+              concluding the app cannot take bKash.
+            */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 'var(--s2)' }}>
+              <MethodMarks />
+            </div>
             <p className="field-hint" style={{ textAlign: 'center' }}>
-              bKash · Nagad · Rocket · upay · cards · internet banking
+              On the next screen choose <strong>Mobile Banking</strong> for bKash or Nagad.
             </p>
 
             <Message kind="info">
@@ -120,13 +130,8 @@ export default function PayCharge({ balancePaisa, onPaid, onCancel }) {
               what the accounts office matches against — so it is shown prominently rather
               than buried, and it is the one thing worth writing down.
             */}
-            <div className="rows" style={{ marginTop: 'var(--s5)' }}>
-              <div className="row">
-                <span className="row-meta">Reference</span>
-                <span className="row-main" style={{ textAlign: 'right', fontWeight: 550 }}>
-                  <code data-testid="order-ref">{order.order_ref}</code>
-                </span>
-              </div>
+            <div style={{ marginTop: 'var(--s5)' }}>
+              <ReferenceChip reference={order.order_ref} />
             </div>
             <p className="field-hint">
               Payments are confirmed against the bank&rsquo;s settlement file, usually by the
