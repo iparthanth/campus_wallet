@@ -55,6 +55,31 @@ export function readWalletMode(env = process.env) {
   return requested;
 }
 
+/**
+ * bcrypt cost, validated at boot.
+ *
+ * `Number(process.env.BCRYPT_ROUNDS ?? 12)` accepts anything: an empty string becomes 0,
+ * a typo becomes NaN. Both produce a value bcrypt rejects — but only when someone tries to
+ * log in, which turns a one-character configuration mistake into an authentication outage
+ * discovered by users.
+ *
+ * The ceiling matters as much as the floor. Cost is exponential, and bcryptjs is pure
+ * JavaScript running on the request thread: 15 rounds is roughly eight times 12, which on
+ * a small shared instance is seconds of work per login. A number chosen to be "extra
+ * secure" is how an API becomes unusable.
+ */
+function readBcryptRounds() {
+  const raw = process.env.BCRYPT_ROUNDS ?? '12';
+  const rounds = Number(raw);
+  if (!Number.isInteger(rounds) || rounds < 4 || rounds > 15) {
+    throw new Error(
+      `BCRYPT_ROUNDS must be an integer between 4 and 15, got "${raw}". ` +
+      '10–12 is the sensible production range; 4 is for tests only.'
+    );
+  }
+  return rounds;
+}
+
 export const config = {
   env: process.env.NODE_ENV ?? 'development',
 
@@ -89,7 +114,7 @@ export const config = {
   databaseUrl: required('DATABASE_URL'),
   jwtSecret: requireStrongSecret('JWT_SECRET'),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '15m',
-  bcryptRounds: Number(process.env.BCRYPT_ROUNDS ?? 12),
+  bcryptRounds: readBcryptRounds(),
 
   // Browser origins allowed to call this API. Empty in development because the Vite
   // dev server proxies /api, so requests are same-origin and never preflight.
