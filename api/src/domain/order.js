@@ -146,10 +146,14 @@ export async function raiseOrder({ operatorUserId, amountPaisa, memo = null }) {
     const token = randomBytes(9).toString('base64url'); // 72 bits, for the in-app deep link
     const row = (await client.query(
       `INSERT INTO charges (merchant_id, amount_paisa, memo, token, order_ref,
-                            bangla_qr_payload, ledger_posting_id, expires_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7, now() + ($8 || ' minutes')::interval)
+                            bangla_qr_payload, ledger_posting_id, raised_by_user_id, expires_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8, now() + ($9 || ' minutes')::interval)
        RETURNING id, token, order_ref, amount_paisa, memo, status, expires_at, created_at`,
-      [outlet.id, amountPaisa, memo, token, orderRef, qrPayload, posting.id, String(ORDER_TTL_MINUTES)]
+      // raised_by_user_id is the PERSON, recorded now. merchants.operator_id is a current
+      // pointer: reassign the counter and every past order would appear to have been
+      // raised by whoever holds it today.
+      [outlet.id, amountPaisa, memo, token, orderRef, qrPayload, posting.id, operatorUserId,
+       String(ORDER_TTL_MINUTES)]
     )).rows[0];
 
     return {
@@ -232,8 +236,11 @@ export async function outletSummary(operatorUserId) {
   )).rows[0];
 
   const recent = (await query(
-    `SELECT token, order_ref, amount_paisa, memo, status, created_at, paid_at
-       FROM charges WHERE merchant_id = $1 ORDER BY created_at DESC LIMIT 20`,
+    `SELECT c.token, c.order_ref, c.amount_paisa, c.memo, c.status, c.created_at, c.paid_at,
+            u.name AS raised_by_name
+       FROM charges c
+       LEFT JOIN users u ON u.id = c.raised_by_user_id
+      WHERE c.merchant_id = $1 ORDER BY c.created_at DESC LIMIT 20`,
     [outlet.id]
   )).rows;
 

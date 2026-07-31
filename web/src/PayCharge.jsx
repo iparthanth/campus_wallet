@@ -25,10 +25,16 @@ export default function PayCharge({ balancePaisa, onPaid, onCancel }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [holdsBalance, setHoldsBalance] = useState(null); // null = not yet known
+  // Whether the gateway is SSLCommerz's test store. Drives the notice below.
+  const [sandbox, setSandbox] = useState(false);
 
   useEffect(() => {
     // If this fails, assume the safe answer: no internal balance, so no Pay button.
-    api.mode().then((m) => setHoldsBalance(Boolean(m.holds_balance))).catch(() => setHoldsBalance(false));
+    api.mode()
+      .then((m) => { setHoldsBalance(Boolean(m.holds_balance)); setSandbox(Boolean(m.gateway?.sandbox)); })
+      // Default to NOT claiming sandbox if the lookup fails: wrongly telling someone their
+      // real payment is a test is worse than saying nothing.
+      .catch(() => { setHoldsBalance(false); setSandbox(false); });
   }, []);
 
   async function look(e) {
@@ -127,6 +133,24 @@ export default function PayCharge({ balancePaisa, onPaid, onCancel }) {
             <p className="field-hint" style={{ textAlign: 'center' }}>
               On the next screen choose <strong>Mobile Banking</strong> for bKash or Nagad.
             </p>
+
+            {/*
+              Say it BEFORE the redirect, not after.
+              The sandbox swaps bKash's real number/OTP/PIN steps for a "Success / Failed"
+              button. Somebody meeting that with no warning reasonably concludes the payment
+              is fake or unfinished — so the warning belongs on the last screen we control,
+              while there is still time to read it.
+            */}
+            {sandbox && (
+              <Message kind="warn" testid="sandbox-notice">
+                <strong>Test mode — no real money moves.</strong> This deployment uses
+                SSLCommerz&rsquo;s sandbox, so the next page simulates the bank instead of
+                contacting it: pick a method, then press <strong>Success</strong> to
+                complete the payment or <strong>Failed</strong> to see a decline. A live
+                store replaces that with bKash&rsquo;s own number, OTP and PIN screens —
+                which only bKash may ever show.
+              </Message>
+            )}
 
             <Message kind="info">
               <strong>Or scan the Bangla QR</strong> on the counter screen with any bank or

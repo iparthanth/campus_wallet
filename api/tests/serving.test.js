@@ -62,6 +62,36 @@ describe('the /api prefix reaches the same routes as the bare path', () => {
   });
 });
 
+describe('the deployment is honest about test money', () => {
+  /**
+   * The sandbox replaces bKash's real number/OTP/PIN flow with a "Success / Failed" button.
+   * That is correct of SSLCommerz — a sandbox that sent real OTPs would text strangers on
+   * every test run — but on screen it reads as an unfinished product, and someone
+   * demonstrating this should never have to explain away a button their audience just
+   * watched them press.
+   *
+   * So the interface has to know, which means the API has to say.
+   */
+  test('/mode reports whether the gateway is a sandbox', async () => {
+    const res = await api().get('/api/mode');
+    expect(res.status).toBe(200);
+    expect(res.body.gateway).toBeDefined();
+    expect(typeof res.body.gateway.sandbox).toBe('boolean');
+  });
+
+  test('tests run against the sandbox, and it says so', async () => {
+    const res = await api().get('/api/mode');
+    expect(res.body.gateway.sandbox).toBe(true);
+  });
+
+  test('no gateway credential is exposed — only the published test store id', async () => {
+    const body = JSON.stringify((await api().get('/api/mode')).body);
+    // The store PASSWORD must never appear, sandbox or not.
+    expect(body).not.toContain('qwerty');
+    expect(body).not.toMatch(/store_passwd|storePassword|secret/i);
+  });
+});
+
 describe('Content-Security-Policy', () => {
   /*
    * The header that blanked the site. `default-src 'none'` on an HTML response forbids the

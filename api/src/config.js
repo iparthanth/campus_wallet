@@ -179,6 +179,18 @@ export const config = {
      * The app and the API share one origin in production, so appUrl resolves to the same
      * place — there is no separate frontend host to point at.
      */
+    /*
+     * True while pointed at SSLCommerz's test store.
+     *
+     * The sandbox replaces the real bKash/Nagad flow with a simulator — a "Success /
+     * Failed / Success with risk" button instead of number, OTP and PIN. That is
+     * deliberate on their side: a sandbox that sent real OTPs would text strangers every
+     * time a developer ran a test. But on screen it looks like an unfinished product, so
+     * the UI has to say which one it is. Nobody demonstrating this should have to explain
+     * away a button their audience just watched them press.
+     */
+    sandbox: /sandbox/i.test(process.env.SSL_BASE_URL ?? 'https://sandbox.sslcommerz.com')
+             || (process.env.SSL_STORE_ID ?? 'testbox') === 'testbox',
     callbackBase: process.env.PUBLIC_API_URL ?? process.env.RENDER_EXTERNAL_URL ?? 'http://localhost:3000',
     appUrl: process.env.PUBLIC_APP_URL ?? process.env.RENDER_EXTERNAL_URL ?? 'http://localhost:5173',
   },

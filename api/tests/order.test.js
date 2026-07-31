@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterAll, jest } from '@jest/globals';
-import { resetDb, closeDb, makeMerchant, onboardMerchant } from './helpers.js';
+import { resetDb, closeDb, makeMerchant, onboardMerchant, makeUser } from './helpers.js';
 import { query } from '../src/db/pool.js';
 import { raiseOrder, getOrder, outletSummary, makeOrderRef, qrForOutlet, OrderError } from '../src/domain/order.js';
 import { verifyBanglaQr, parseBanglaQr, parseTlv } from '../src/domain/banglaQr.js';
@@ -13,6 +13,100 @@ beforeEach(async () => {
 });
 
 afterAll(closeDb);
+
+describe('who raised this order', () => {
+  /**
+   * Before migration 012 the only attribution was merchants.operator_id — a CURRENT
+   * pointer, not a historical fact. Reassign a counter and every past order silently began
+   * to look as though the new staff member had raised it. That is not a missing field, it
+   * is a record that rewrites itself, which for a money system is worse than having none.
+   */
+  test('the person who raised it is recorded on the order', async () => {
+    const outlet = await makeMerchant();
+    await onboardMerchant(outlet.merchantId);
+    const order = await raiseOrder({ operatorUserId: outlet.operator.id, amountPaisa: 85_00 });
+
+    const row = (await query(
+      'SELECT raised_by_user_id FROM charges WHERE id = $1', [order.id]
+    )).rows[0];
+    expect(Number(row.raised_by_user_id)).toBe(outlet.operator.id);
+  });
+
+  test('reassigning the counter does NOT rewrite who raised past orders', async () => {
+    const outlet = await makeMerchant();
+    await onboardMerchant(outlet.merchantId);
+    const order = await raiseOrder({ operatorUserId: outlet.operator.id, amountPaisa: 85_00 });
+
+    // The evening shift takes over the counter.
+    const replacement = await makeUser();
+    await query('UPDATE merchants SET operator_id = $1 WHERE id = $2',
+      [replacement.id, outlet.merchantId]);
+
+    const row = (await query(
+      'SELECT raised_by_user_id FROM charges WHERE id = $1', [order.id]
+    )).rows[0];
+    // Still the morning shift. This is the whole point of the column.
+    expect(Number(row.raised_by_user_id)).toBe(outlet.operator.id);
+    expect(Number(row.raised_by_user_id)).not.toBe(replacement.id);
+  });
+
+  test('the counter can see who raised each recent order', async () => {
+    const outlet = await makeMerchant();
+    await onboardMerchant(outlet.merchantId);
+    await raiseOrder({ operatorUserId: outlet.operator.id, amountPaisa: 85_00, memo: 'Rice' });
+
+    const summary = await outletSummary(outlet.operator.id);
+    expect(summary.recent[0].raised_by_name).toBe('Test User');
+  });
+
+  test('the order record outlives the staff account attributed to it', async () => {
+    const outlet = await makeMerchant();
+    await onboardMerchant(outlet.merchantId);
+    const order = await raiseOrder({ operatorUserId: outlet.operator.id, amountPaisa: 85_00 });
+
+    // Attribute it to a spare account, then remove that account. ON DELETE SET NULL, not
+    // CASCADE: removing a person must never remove the evidence that an order existed.
+    const spare = await makeUser();
+    await query('UPDATE charges SET raised_by_user_id = $1 WHERE id = $2', [spare.id, order.id]);
+    await query('DELETE FROM users WHERE id = $1', [spare.id]);
+
+    const row = (await query('SELECT id, raised_by_user_id FROM charges WHERE id = $1', [order.id])).rows[0];
+    expect(row).toBeDefined();               // the order survives
+    expect(row.raised_by_user_id).toBeNull(); // attribution is lost, the record is not
+  });
+
+  /**
+   * Discovered while writing the test above, and worth pinning down: an outlet's operator
+   * cannot be deleted at all once the outlet has ledger accounts.
+   *
+   * Deleting the user cascades to their wallet, which cascades to the merchant — and
+   * ledger_accounts.merchant_id refuses. That is the right answer: an outlet with financial
+   * history is not something a stray DELETE should be able to remove, and the database says
+   * so rather than trusting nobody to try.
+   */
+  test('an outlet with ledger history cannot be deleted out from under its accounts', async () => {
+    const outlet = await makeMerchant();
+    await onboardMerchant(outlet.merchantId);
+    await raiseOrder({ operatorUserId: outlet.operator.id, amountPaisa: 85_00 });
+
+    await expect(query('DELETE FROM users WHERE id = $1', [outlet.operator.id]))
+      .rejects.toThrow(/ledger_accounts_merchant_id_fkey/);
+  });
+
+  test('attribution joins raiser and payer in one place', async () => {
+    const outlet = await makeMerchant();
+    await onboardMerchant(outlet.merchantId);
+    const order = await raiseOrder({ operatorUserId: outlet.operator.id, amountPaisa: 85_00, memo: 'Rice' });
+
+    const row = (await query(
+      'SELECT * FROM order_attribution WHERE order_ref = $1', [order.order_ref]
+    )).rows[0];
+    expect(row.raised_by_name).toBe('Test User');
+    expect(row.merchant_name).toBe(outlet.name);
+    // Unpaid so far — the normal state until the bank's file arrives.
+    expect(row.paid_by_name).toBeNull();
+  });
+});
 
 describe('looking an order up by what the student can actually see', () => {
   /**

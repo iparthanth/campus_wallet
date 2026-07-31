@@ -77,10 +77,21 @@ campusRouter.post('/charges/:token/pay', requireAuth, async (req, res, next) => 
   } catch (err) { return handle(err, res, next); }
 });
 
-/** Tells the client which mode this deployment runs in, so the UI can match it. */
+/**
+ * Tells the client which mode this deployment runs in, so the UI can match it.
+ *
+ * `gateway.sandbox` lets the interface be honest about test money rather than leaving a
+ * viewer to conclude the payment flow is broken. No credential is exposed: the store id is
+ * SSLCommerz's own published test value.
+ */
 campusRouter.get('/mode', (_req, res) => res.json({
   wallet_mode: config.walletMode,
   holds_balance: config.walletMode === 'closed_loop',
+  gateway: {
+    enabled: config.ssl.enabled,
+    sandbox: config.ssl.sandbox,
+    store: config.ssl.sandbox ? config.ssl.storeId : null,
+  },
 }));
 
 const settleSchema = z.object({

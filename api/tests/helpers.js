@@ -25,10 +25,39 @@ async function assertTestDatabase() {
   }
 }
 
+/**
+ * Refuse to run while another suite is using this database.
+ *
+ * Two Jest runs against one test database deadlock: one TRUNCATEs while the other INSERTs,
+ * and Postgres kills whichever it picks. The symptom is a scatter of unrelated failures —
+ * foreign key violations, "register failed", undefined ids — pointing at code that is
+ * perfectly fine. It cost real debugging time twice before being recognised for what it is.
+ *
+ * A session-scoped advisory lock turns that into one clear sentence. Session-scoped rather
+ * than transaction-scoped so it is held for the whole run and released when the connection
+ * closes, including on a crash.
+ */
+const RUN_LOCK = 8_150_463; // arbitrary, but stable: any two runs must pick the same number
+let holdsRunLock = false;
+
+async function claimRunLock() {
+  if (holdsRunLock) return;
+  const { rows } = await query('SELECT pg_try_advisory_lock($1) AS ok', [RUN_LOCK]);
+  if (!rows[0].ok) {
+    throw new Error(
+      'ANOTHER TEST RUN IS USING THIS DATABASE.\n' +
+      'Two Jest processes on one database deadlock on TRUNCATE and produce failures that ' +
+      'look like real bugs but are not. Wait for the other run to finish, or stop it.'
+    );
+  }
+  holdsRunLock = true;
+}
+
 /** Fresh schema once, then a clean table state before every test. */
 export async function resetDb() {
   if (!migrated) {
     await assertTestDatabase();
+    await claimRunLock();
     await migrate({ silent: true });
     migrated = true;
   }

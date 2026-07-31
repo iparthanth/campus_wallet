@@ -41,7 +41,9 @@ async function raiseCharge(operator, amountPaisa) {
 describe('zero-float mode', () => {
   test('the deployment declares that it does not hold balances', async () => {
     const res = await api().get('/mode');
-    expect(res.body).toEqual({ wallet_mode: 'zero_float', holds_balance: false });
+    // toMatchObject, not toEqual: /mode also reports gateway status, and a strict shape
+    // assertion here would fail every time an unrelated field is added to the endpoint.
+    expect(res.body).toMatchObject({ wallet_mode: 'zero_float', holds_balance: false });
   });
 
   test('paying from an internal balance is REFUSED — that would be unlicensed e-money', async () => {
