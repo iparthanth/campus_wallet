@@ -67,11 +67,23 @@ jobs:
           --health-cmd "pg_isready -U wallet -d campus_wallet"
           --health-interval 5s --health-timeout 5s --health-retries 10
 
+    # Both configurations get driven in a real browser, because they are genuinely
+    # different applications. Production is zero_float: no balance, no transfers, no
+    # top-up. closed_loop is the demo. When the balance was removed from the student
+    # screen, every E2E test failed on getByTestId('balance') — the suite only knew how
+    # to drive the demo, and nothing had ever exercised what actually ships.
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [zero_float, closed_loop]
+
     env:
       DATABASE_URL: postgres://wallet:wallet@localhost:5432/campus_wallet
       JWT_SECRET: ci-test-secret-not-used-in-production-min32
       BCRYPT_ROUNDS: 4
       CI: 'true'
+      # Read at import time by config.js, so it must be set before the API starts.
+      WALLET_MODE: ${{ matrix.mode }}
 
     steps:
       - uses: actions/checkout@v4
@@ -81,6 +93,12 @@ jobs:
       - name: Install and migrate API
         working-directory: api
         run: npm ci && npm run migrate
+
+      # The zero-float specs drive a real counter, which needs an acquirer-onboarded
+      # outlet — an administrative state no code path creates. The seed establishes it.
+      - name: Seed demo outlets
+        working-directory: api
+        run: npm run seed
 
       - name: Start API
         working-directory: api
@@ -107,12 +125,14 @@ jobs:
           done
           echo "API did not become ready in 30s"; exit 1
 
-      - name: Run E2E
+      - name: Run E2E (${{ matrix.mode }})
         working-directory: e2e
-        run: npx playwright test
+        # Specs are split by directory because a test written for one mode cannot pass in
+        # the other: one asserts a balance exists, the other asserts it does not.
+        run: npx playwright test tests/${{ matrix.mode == 'zero_float' && 'zero-float' || 'closed-loop' }}
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.mode }}
           path: e2e/playwright-report/
