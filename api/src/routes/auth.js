@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import bcrypt from 'bcryptjs';
+import { hashPassword, verifyPassword, needsRehash, timingDummyHash } from '../services/password.js';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { withTransaction, query } from '../db/pool.js';
@@ -18,13 +18,7 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-/**
- * A real bcrypt hash of a throwaway password, computed once at startup.
- * Used to burn the same CPU time when the email does not exist, so an attacker
- * cannot tell registered from unregistered accounts by response timing.
- * (A hand-written fake hash string would make bcrypt.compare fail fast — and leak.)
- */
-const TIMING_DUMMY_HASH = bcrypt.hashSync('timing-attack-dummy-password', config.bcryptRounds);
+// The equal-work branch for an unknown email lives in services/password.js.
 
 function signToken(user) {
   return jwt.sign(
@@ -42,7 +36,7 @@ authRouter.post('/register', async (req, res, next) => {
   const { name, email, password } = parsed.data;
 
   try {
-    const passwordHash = await bcrypt.hash(password, config.bcryptRounds);
+    const passwordHash = await hashPassword(password);
 
     // A user and their wallet are created together or not at all.
     const user = await withTransaction(async (client) => {
@@ -79,9 +73,22 @@ authRouter.post('/login', async (req, res, next) => {
 
     // Same generic message and a hash comparison either way, so response time and
     // wording do not reveal whether the email exists (user enumeration).
-    const ok = await bcrypt.compare(password, user ? user.password_hash : TIMING_DUMMY_HASH);
+    const ok = await verifyPassword(password, user ? user.password_hash : timingDummyHash);
     if (!user || !ok) {
       return res.status(401).json({ error: { code: 'BAD_CREDENTIALS', message: 'Invalid email or password' } });
+    }
+
+    /*
+     * Upgrade a legacy bcrypt hash now, while the plaintext is briefly in hand. Deliberately
+     * not awaited into the response path: the student is authenticated either way, and a
+     * slow write must not delay their login or fail it.
+     */
+    if (needsRehash(user.password_hash)) {
+      hashPassword(password)
+        .then((fresh) => query('UPDATE users SET password_hash = $1 WHERE id = $2', [fresh, user.id]))
+        .catch((err) => console.error(JSON.stringify({
+          level: 'warn', msg: 'password rehash failed', user_id: user.id, error: err.message,
+        })));
     }
 
     const safeUser = { id: user.id, name: user.name, email: user.email, role: user.role };

@@ -80,6 +80,19 @@ function readBcryptRounds() {
   return rounds;
 }
 
+function readScryptN() {
+  const raw = process.env.PASSWORD_SCRYPT_N ?? '16384';
+  const n = Number(raw);
+  // Power-of-two check: scrypt rejects anything else, and it would fail at first login
+  // rather than at boot.
+  if (!Number.isInteger(n) || n < 16384 || n > 1048576 || (n & (n - 1)) !== 0) {
+    throw new Error(
+      `PASSWORD_SCRYPT_N must be a power of two between 16384 and 1048576, got "${raw}".`
+    );
+  }
+  return n;
+}
+
 export const config = {
   env: process.env.NODE_ENV ?? 'development',
 
@@ -114,7 +127,17 @@ export const config = {
   databaseUrl: required('DATABASE_URL'),
   jwtSecret: requireStrongSecret('JWT_SECRET'),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '15m',
+  // Legacy: still used to VERIFY bcrypt hashes made before the move to scrypt. New
+  // passwords never use it. See services/password.js.
   bcryptRounds: readBcryptRounds(),
+  /*
+   * scrypt cost. Must be a power of two — work and memory are both linear in it.
+   * 16384 (2^14, Node's default) is ~44ms on ordinary hardware and ~1.1s on the 0.1-CPU
+   * free instance this runs on. A university deployment on a real server should raise it;
+   * the value is stored inside each hash, so raising it upgrades accounts gradually as
+   * people log in rather than invalidating anyone's password.
+   */
+  scryptN: readScryptN(),
 
   // Browser origins allowed to call this API. Empty in development because the Vite
   // dev server proxies /api, so requests are same-origin and never preflight.

@@ -1,4 +1,4 @@
-import bcrypt from 'bcryptjs';
+import { hashPassword } from '../services/password.js';
 import { withTransaction, closePool, query } from './pool.js';
 import { config } from '../config.js';
 
@@ -35,7 +35,7 @@ export async function seed({ silent = false, ifEmpty = false } = {}) {
     }
   }
 
-  const hash = await bcrypt.hash('password123', config.bcryptRounds);
+  const hash = await hashPassword('password123');
 
   // Opening balances, chosen so the post-transfer balances land on round numbers.
   const people = [
