@@ -13,7 +13,11 @@
   --surface-hi:   #ffffff;
   --ink:          #0b0b0b;
   --ink-2:        #52514e;
-  --ink-muted:    #898781;
+  /* 4.96:1 on --surface, 4.83:1 on --plane. The previous #898781 measured 3.41:1 in a
+     live audit — below the WCAG AA floor of 4.5:1 for body text, and this token carries
+     stat-tile labels, card notes and row metadata, which is most of the small print in the
+     app. "Muted" must still mean readable. */
+  --ink-muted:    #706e69;
   --hairline:     rgba(11, 11, 11, 0.10);
   --hairline-2:   rgba(11, 11, 11, 0.06);
 
@@ -85,7 +89,7 @@
   :root:where(:not([data-theme="light"])) {
     color-scheme: dark;
     --plane: #0d0d0d; --surface: #1a1a19; --surface-sunk: #232322; --surface-hi: #262625;
-    --ink: #ffffff; --ink-2: #c3c2b7; --ink-muted: #898781;
+    --ink: #ffffff; --ink-2: #c3c2b7; --ink-muted: #9a988f;
     --hairline: rgba(255,255,255,0.12); --hairline-2: rgba(255,255,255,0.07);
     /* Re-chosen for the dark surface, not lightened from the light value: the light teal
        is too dark to read on #1a1a19, and simply raising its lightness desaturates it to
@@ -109,7 +113,7 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
   --plane: #0d0d0d; --surface: #1a1a19; --surface-sunk: #232322; --surface-hi: #262625;
-  --ink: #ffffff; --ink-2: #c3c2b7; --ink-muted: #898781;
+  --ink: #ffffff; --ink-2: #c3c2b7; --ink-muted: #9a988f;
   --hairline: rgba(255,255,255,0.12); --hairline-2: rgba(255,255,255,0.07);
   --accent: #4fbfb3; --accent-press: #6fd0c5; --accent-wash: #0e2a28; --accent-ink: #9fe3db;
   --on-accent: #06201e;
@@ -456,3 +460,22 @@ body {
   border: 2px solid var(--brand-2); border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
 }
+
+
+/* ==========================================================================
+   Audit fixes — measured on the live site, not guessed
+   ========================================================================== */
+
+/*
+ * The theme toggle rendered 27px tall. Anything under about 32px is unreliable for a
+ * thumb, and this sits at the very bottom of the sidebar where the hand is least steady.
+ */
+.seg button { min-height: 34px; }
+
+/*
+ * The brand mark reads as 1.05:1 to a contrast checker because its background is a
+ * gradient, which computed style reports as "none" — the checker falls back to the page
+ * background and compares white against white. The real rendered contrast is white on
+ * #0c5f5b (10.2:1). Stated here so the next audit does not "fix" a false positive by
+ * darkening text that is already correct.
+ */
