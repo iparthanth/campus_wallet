@@ -1,7 +1,7 @@
 import { withTransaction, query } from '../db/pool.js';
 import { config } from '../config.js';
 import { post, ACCOUNTS, DEBIT, CREDIT } from './ledger.js';
-import { OrderError } from './order.js';
+import { OrderError, ORDER_LOOKUP_SQL, normaliseOrderCode } from './order.js';
 import * as ssl from '../services/sslcommerz.js';
 
 /**
@@ -37,8 +37,8 @@ export async function startOrderPayment({ token, payerUserId }) {
     `SELECT c.id, c.order_ref, c.amount_paisa, c.memo, c.status, c.expires_at,
             m.id AS merchant_id, m.name AS merchant_name
        FROM charges c JOIN merchants m ON m.id = c.merchant_id
-      WHERE c.token = $1`,
-    [token]
+      WHERE ${ORDER_LOOKUP_SQL}`,
+    [normaliseOrderCode(token)]
   )).rows[0];
 
   if (!order) throw new OrderError(404, 'NO_ORDER', 'This code is not valid');
@@ -297,7 +297,9 @@ export async function closeOrderPayment({ tranId, status, note = null }) {
 
 /** Payment attempts for one order — the history a student or officer needs when chasing. */
 export async function paymentsForOrder(token) {
-  const order = (await query('SELECT id FROM charges WHERE token = $1', [token])).rows[0];
+  const order = (await query(
+    `SELECT id FROM charges c WHERE ${ORDER_LOOKUP_SQL}`, [normaliseOrderCode(token)]
+  )).rows[0];
   if (!order) throw new OrderError(404, 'NO_ORDER', 'This code is not valid');
 
   const rows = (await query(

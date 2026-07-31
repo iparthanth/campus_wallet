@@ -40,7 +40,15 @@ export default function PayCharge({ balancePaisa, onPaid, onCancel }) {
       const token = code.trim().replace(/^campuswallet:\/\/pay\//, '');
       const o = holdsBalance ? await api.charge(token) : await api.order(token);
       if (o.status === 'expired') throw new Error('This order has expired. Ask the counter to raise it again.');
-      setOrder({ ...o, token });
+      /*
+       * Keep the token the SERVER returned, not the code the student typed.
+       *
+       * `{ ...o, token }` overwrote it with the typed value. Type the human-readable
+       * reference and order.token became "PUC-1-DZ6B2P7N", so pressing "Pay online" asked
+       * the gateway route for an order whose token was a reference — and the student was
+       * told "This code is not valid" underneath the order that had just loaded correctly.
+       */
+      setOrder({ ...o, token: o.token ?? token });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -141,7 +149,7 @@ export default function PayCharge({ balancePaisa, onPaid, onCancel }) {
         )}
 
         <div className="btn-row">
-          <button className="btn btn-ghost" onClick={() => setOrder(null)} disabled={busy}>Back</button>
+          <button className="btn btn-ghost" onClick={() => { setOrder(null); setError(''); }} disabled={busy}>Back</button>
         </div>
         {error && <Message kind="error" testid="pay-error">{error}</Message>}
       </div>
@@ -172,7 +180,7 @@ export default function PayCharge({ balancePaisa, onPaid, onCancel }) {
           <button className="btn" onClick={pay} disabled={busy || short} data-testid="btn-pay-confirm">
             {busy ? 'Paying…' : `Pay ${formatPaisa(order.amount_paisa)}`}
           </button>
-          <button className="btn btn-ghost" onClick={() => setOrder(null)} disabled={busy}>Back</button>
+          <button className="btn btn-ghost" onClick={() => { setOrder(null); setError(''); }} disabled={busy}>Back</button>
         </div>
         {error && <Message kind="error" testid="pay-error">{error}</Message>}
       </div>

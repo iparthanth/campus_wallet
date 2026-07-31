@@ -125,6 +125,52 @@ describe('paying an order online', () => {
   });
 });
 
+describe('every way a student can name an order reaches the same order', () => {
+  /**
+   * The bug this prevents recurring: getOrder was widened to accept the human-readable
+   * reference printed on the counter screen, and startOrderPayment was not.
+   *
+   * So a student typed the reference, saw their order correctly, pressed "Pay online" —
+   * and was told "This code is not valid" UNDERNEATH the order that had just loaded. The
+   * lookup and the payment disagreed about what an order code is.
+   *
+   * Both identifiers, through both functions, or the flow is broken for someone.
+   */
+  test('paying works by the reference the counter displays', async () => {
+    const { order } = await anOrder();
+    const student = await makeUser();
+
+    const session = await startOrderPayment({ token: order.order_ref, payerUserId: student.id });
+    expect(session.order_ref).toBe(order.order_ref);
+    expect(session.gateway_url).toContain('/checkout/');
+  });
+
+  test('paying still works by the QR token', async () => {
+    const { order } = await anOrder();
+    const student = await makeUser();
+    const session = await startOrderPayment({ token: order.token, payerUserId: student.id });
+    expect(session.order_ref).toBe(order.order_ref);
+  });
+
+  test('case and stray spaces do not break payment', async () => {
+    const { order } = await anOrder();
+    const student = await makeUser();
+    const session = await startOrderPayment({
+      token: `  ${order.order_ref.toLowerCase()}  `, payerUserId: student.id,
+    });
+    expect(session.order_ref).toBe(order.order_ref);
+  });
+
+  test('the payment history is reachable by either identifier', async () => {
+    const { order } = await anOrder();
+    const student = await makeUser();
+    await startOrderPayment({ token: order.order_ref, payerUserId: student.id });
+
+    expect((await paymentsForOrder(order.order_ref)).payments).toHaveLength(1);
+    expect((await paymentsForOrder(order.token)).payments).toHaveLength(1);
+  });
+});
+
 /* ------------------------------------------------------- the failure paths that matter */
 
 describe('the redirect and the IPN racing', () => {

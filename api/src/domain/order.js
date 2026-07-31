@@ -169,6 +169,22 @@ export async function raiseOrder({ operatorUserId, amountPaisa, memo = null }) {
  * outlet's account, and a student who can fetch arbitrary payloads could print and
  * substitute one. They only ever need to see what they are being asked to pay.
  */
+/**
+ * The SQL fragment that resolves either identifier to one order.
+ *
+ * Shared, not repeated, because repeating it is what caused the bug this fixes. getOrder
+ * was widened to accept the human-readable reference; startOrderPayment was not. So a
+ * student could look an order up by the code printed on the counter screen, see it
+ * correctly, press "Pay online" — and be told "This code is not valid" underneath the
+ * order that had just loaded.
+ *
+ * One definition of "which order is this", used everywhere an order is looked up.
+ */
+export const ORDER_LOOKUP_SQL = '(c.token = $1 OR upper(c.order_ref) = upper($1))';
+
+/** Whatever the student typed or scanned, trimmed. */
+export const normaliseOrderCode = (code) => String(code ?? '').trim();
+
 export async function getOrder(code) {
   /*
    * Accepts EITHER identifier, because there are two and they serve different people.
@@ -188,13 +204,12 @@ export async function getOrder(code) {
    * still never returned, so guessing a reference reveals what someone owes, not a way to
    * take their money. Auth is required and the endpoint is rate limited.
    */
-  const normalised = String(code ?? '').trim();
   const row = (await query(
     `SELECT c.token, c.order_ref, c.amount_paisa, c.memo, c.status, c.expires_at, c.paid_at,
             m.name AS merchant_name, m.category
        FROM charges c JOIN merchants m ON m.id = c.merchant_id
-      WHERE c.token = $1 OR upper(c.order_ref) = upper($1)`,
-    [normalised]
+      WHERE ${ORDER_LOOKUP_SQL}`,
+    [normaliseOrderCode(code)]
   )).rows[0];
   if (!row) throw new OrderError(404, 'NO_ORDER', 'This code is not valid');
 
