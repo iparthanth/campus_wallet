@@ -169,13 +169,32 @@ export async function raiseOrder({ operatorUserId, amountPaisa, memo = null }) {
  * outlet's account, and a student who can fetch arbitrary payloads could print and
  * substitute one. They only ever need to see what they are being asked to pay.
  */
-export async function getOrder(token) {
+export async function getOrder(code) {
+  /*
+   * Accepts EITHER identifier, because there are two and they serve different people.
+   *
+   *   token      72 random bits, never displayed. Rides inside the QR deep link, so a
+   *              scan cannot be guessed at and neighbouring orders cannot be probed.
+   *   order_ref  PUC-3-K9F2QT7M. Crockford base32 — no I, L, O or U — chosen precisely so
+   *              it survives being read aloud across a noisy counter and typed by hand.
+   *
+   * This looked up the token ONLY. The counter displays the reference, so a student who
+   * typed exactly what was on the screen in front of them got "This code is not valid".
+   * The human-readable identifier existed, was carefully designed, and was not accepted
+   * anywhere — the manual path was dead while the QR path worked.
+   *
+   * The reference is ~40 bits, weaker than the token, which is why it unlocks only this
+   * view: amount, outlet and status. The QR payload — the actual payment instruction — is
+   * still never returned, so guessing a reference reveals what someone owes, not a way to
+   * take their money. Auth is required and the endpoint is rate limited.
+   */
+  const normalised = String(code ?? '').trim();
   const row = (await query(
     `SELECT c.token, c.order_ref, c.amount_paisa, c.memo, c.status, c.expires_at, c.paid_at,
             m.name AS merchant_name, m.category
        FROM charges c JOIN merchants m ON m.id = c.merchant_id
-      WHERE c.token = $1`,
-    [token]
+      WHERE c.token = $1 OR upper(c.order_ref) = upper($1)`,
+    [normalised]
   )).rows[0];
   if (!row) throw new OrderError(404, 'NO_ORDER', 'This code is not valid');
 

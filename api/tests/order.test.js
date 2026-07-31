@@ -14,6 +14,64 @@ beforeEach(async () => {
 
 afterAll(closeDb);
 
+describe('looking an order up by what the student can actually see', () => {
+  /**
+   * The counter displays the order REFERENCE. The lookup used to query the token only —
+   * a random 72-bit string shown nowhere — so a student who typed exactly what was on the
+   * screen in front of them was told "This code is not valid". The manual path was dead
+   * while the QR path worked, which is why the flow was impossible to demonstrate.
+   */
+  test('the reference printed on the counter screen works', async () => {
+    const outlet = await makeMerchant();
+    await onboardMerchant(outlet.merchantId);
+    const order = await raiseOrder({ operatorUserId: outlet.operator.id, amountPaisa: 85_00, memo: 'Rice' });
+
+    const found = await getOrder(order.order_ref);
+    expect(found.order_ref).toBe(order.order_ref);
+    expect(Number(found.amount_paisa)).toBe(85_00);
+    expect(found.merchant_name).toBe(outlet.name);
+  });
+
+  test('the QR token still works', async () => {
+    const outlet = await makeMerchant();
+    await onboardMerchant(outlet.merchantId);
+    const order = await raiseOrder({ operatorUserId: outlet.operator.id, amountPaisa: 40_00 });
+
+    const found = await getOrder(order.token);
+    expect(found.order_ref).toBe(order.order_ref);
+  });
+
+  test('case and surrounding spaces are forgiven', async () => {
+    const outlet = await makeMerchant();
+    await onboardMerchant(outlet.merchantId);
+    const order = await raiseOrder({ operatorUserId: outlet.operator.id, amountPaisa: 25_00 });
+
+    // Typed from a screen, on a phone that capitalises — this must not be a dead end.
+    for (const typed of [order.order_ref.toLowerCase(), `  ${order.order_ref}  `]) {
+      expect((await getOrder(typed)).order_ref).toBe(order.order_ref);
+    }
+  });
+
+  test('the QR payload is still never returned by either identifier', async () => {
+    const outlet = await makeMerchant();
+    await onboardMerchant(outlet.merchantId);
+    const order = await raiseOrder({ operatorUserId: outlet.operator.id, amountPaisa: 60_00 });
+
+    // The payload is a payment instruction for the outlet's account. Widening the lookup
+    // must not widen what it discloses.
+    for (const id of [order.order_ref, order.token]) {
+      const found = await getOrder(id);
+      expect(found.bangla_qr_payload).toBeUndefined();
+      expect(Object.keys(found)).not.toContain('bangla_qr_payload');
+    }
+  });
+
+  test('a made-up reference is still refused', async () => {
+    await expect(getOrder('PUC-9-ZZZZZZZZ')).rejects.toMatchObject({ code: 'NO_ORDER' });
+    await expect(getOrder('')).rejects.toMatchObject({ code: 'NO_ORDER' });
+  });
+});
+
 describe('order references', () => {
   test('fit the QR field and the database constraint', () => {
     for (let i = 0; i < 200; i += 1) {

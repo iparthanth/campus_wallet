@@ -182,12 +182,12 @@ export default function PayCharge({ balancePaisa, onPaid, onCancel }) {
   return (
     <div className="card" style={{ maxWidth: 460 }}>
       <form onSubmit={look}>
-        <Field id="code" label={holdsBalance ? 'Bill code' : 'Order code'} data-testid="input-charge-code"
+        <Field id="code" label={holdsBalance ? 'Bill code' : 'Order reference'} data-testid="input-charge-code"
                value={code} onChange={(e) => setCode(e.target.value)}
-               placeholder="Scan the QR, or type the code"
+               placeholder="PUC-3-K9F2QT7M"
                hint={holdsBalance
                  ? 'The counter shows a code under the QR.'
-                 : 'The counter shows a reference under the QR — look up what you are being charged.'}
+                 : 'Type the reference shown under the QR on the counter screen — it looks like PUC-3-K9F2QT7M.'}
                required />
         <div className="btn-row">
           <button className="btn" disabled={busy || holdsBalance === null} data-testid="btn-lookup-charge">

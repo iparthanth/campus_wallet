@@ -185,7 +185,7 @@ export default function App() {
                 <p className="page-sub">
                   {view === 'send' ? 'Transfer balance to another student.'
                     : view === 'topup' ? 'Add balance with bKash, Nagad, Rocket or a card.'
-                    : view === 'pay' ? 'Scan the counter QR at the canteen, photocopy corner or library.'
+                    : view === 'pay' ? 'Enter the reference shown on the counter screen to see what you are being charged.'
                     : view === 'counter' ? 'Raise a bill for a student to scan.'
                     : view === 'account' ? 'Verify the mobile number tied to this account.'
                     : view === 'history' ? 'Every transfer in and out of this wallet.'
